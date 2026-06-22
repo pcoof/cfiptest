@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# 虚拟环境
+.venv/
+venv/
+env/
+
+# 配置和缓存
+cfiptest_config.json
+.cache/
+
+# uv
+uv.lock
+
+# IDE
+.vscode/
+.idea/
+
+# 日志
+*.log
+
+# Windows
+Thumbs.db
+desktop.ini
+
+# WorkBuddy
+.workbuddy/

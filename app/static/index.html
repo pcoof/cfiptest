@@ -1,0 +1,2168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>CF IP Tester</title>
+<style>
+/* ═══════════════════════════════════════════════
+   Design Tokens
+═══════════════════════════════════════════════ */
+:root {
+  --bg:        #0f1117;
+  --surface:   #16181f;
+  --surface2:  #1e2130;
+  --border:    #2a2d3e;
+  --accent:    #f6821f;
+  --accent2:   #ff9f45;
+  --blue:      #3b82f6;
+  --green:     #22c55e;
+  --red:       #ef4444;
+  --yellow:    #eab308;
+  --muted:     #6b7280;
+  --text:      #e2e8f0;
+  --text2:     #94a3b8;
+  --radius:    8px;
+  --radius-lg: 12px;
+  --shadow:    0 4px 24px rgba(0,0,0,.45);
+  --sidebar-w: 320px;
+}
+
+/* ═══════════════════════════════════════════════
+   Reset & Base
+═══════════════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:14px;height:100%}
+body{
+  font-family: -apple-system,'Segoe UI',system-ui,Roboto,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  height:100%;
+  overflow:hidden;
+  user-select:none;
+}
+button{cursor:pointer;border:none;outline:none;font-family:inherit}
+input,textarea,select{font-family:inherit;outline:none}
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ═══════════════════════════════════════════════
+   Layout
+═══════════════════════════════════════════════ */
+#app{
+  display:grid;
+  grid-template-columns:var(--sidebar-w) 1fr;
+  grid-template-rows:48px 1fr 32px;
+  grid-template-areas:
+    "header  header"
+    "sidebar main"
+    "footer  footer";
+  height:100vh;
+  gap:0;
+  transition:grid-template-columns .25s ease;
+}
+#app.sidebar-hidden{
+  grid-template-columns:0 1fr;
+}
+#app.sidebar-hidden #sidebar{
+  overflow:hidden;
+  pointer-events:none;
+}
+
+/* ═══════════════════════════════════════════════
+   Header
+═══════════════════════════════════════════════ */
+#header{
+  grid-area:header;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:0 16px;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  -webkit-app-region:drag;
+}
+.logo{
+  display:flex;align-items:center;gap:8px;
+  font-size:15px;font-weight:700;letter-spacing:-.3px;
+  -webkit-app-region:no-drag;
+}
+.logo-icon{
+  width:28px;height:28px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  border-radius:7px;
+  display:grid;place-items:center;
+  font-size:14px;font-weight:900;color:#fff;
+}
+.header-spacer{flex:1}
+#sidebar-toggle{
+  width:30px;height:30px;border-radius:6px;
+  background:var(--surface2);border:1px solid var(--border);
+  color:var(--text2);display:grid;place-items:center;
+  transition:.15s;-webkit-app-region:no-drag;font-size:15px;
+}
+#sidebar-toggle:hover{background:var(--border);color:var(--text)}
+#proxy-badge{
+  display:flex;align-items:center;gap:6px;
+  font-size:12px;padding:4px 10px;
+  border-radius:20px;
+  border:1px solid var(--border);
+  background:var(--surface2);
+  cursor:pointer;
+  -webkit-app-region:no-drag;
+  transition:.15s;
+}
+#proxy-badge:hover{border-color:var(--accent)}
+.badge-dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.badge-dot.ok{background:var(--green)}
+.badge-dot.warn{background:var(--yellow);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ═══════════════════════════════════════════════
+   Sidebar (Left Panel)
+═══════════════════════════════════════════════ */
+#sidebar{
+  grid-area:sidebar;
+  display:flex;
+  flex-direction:column;
+  background:var(--surface);
+  border-right:1px solid var(--border);
+  overflow:hidden;
+  transition:opacity .2s;
+}
+
+/* Tabs */
+.tab-bar{
+  display:flex;
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.tab-btn{
+  flex:1;padding:10px 0;
+  font-size:11.5px;font-weight:600;
+  color:var(--muted);
+  background:transparent;
+  border-bottom:2px solid transparent;
+  transition:.2s;
+  white-space:nowrap;
+}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tab-btn:hover:not(.active){color:var(--text2)}
+
+.tab-pane{display:none;flex:1;overflow-y:auto;flex-direction:column;min-height:0}
+.tab-pane.active{display:flex}
+
+/* Input section */
+.section{padding:10px 12px}
+.section-label{
+  font-size:11px;font-weight:600;
+  color:var(--muted);text-transform:uppercase;letter-spacing:.8px;
+  margin-bottom:7px;display:flex;align-items:center;gap:6px;
+}
+.section-label .cnt{
+  background:var(--surface2);
+  color:var(--text2);
+  font-size:10px;padding:1px 6px;border-radius:10px;
+  font-style:normal;letter-spacing:0;text-transform:none;
+  font-weight:500;
+}
+
+#ip-input{
+  width:100%;height:190px;resize:none;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius);color:var(--text);
+  font-size:12px;line-height:1.6;padding:9px;transition:border-color .2s;
+  font-family:'Cascadia Code','Fira Code',monospace,sans-serif;
+  user-select:text;
+}
+#ip-input:focus{border-color:var(--accent)}
+#ip-input::placeholder{color:var(--muted);font-size:11px}
+
+.input-actions{display:flex;gap:5px;margin-top:7px;flex-wrap:wrap}
+.btn-ghost{
+  flex:1;padding:5px 4px;font-size:11.5px;
+  border-radius:var(--radius);background:var(--surface2);
+  color:var(--text2);border:1px solid var(--border);transition:.2s;
+  white-space:nowrap;
+}
+.btn-ghost:hover{background:var(--border);color:var(--text)}
+.btn-ghost.danger:hover{background:rgba(239,68,68,.15);border-color:rgba(239,68,68,.4);color:var(--red)}
+
+/* Options section */
+.option-group{padding:0 12px 10px}
+.option-title{
+  font-size:11px;font-weight:600;color:var(--muted);
+  text-transform:uppercase;letter-spacing:.8px;
+  margin-bottom:7px;padding-top:10px;
+}
+
+.toggle-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.toggle-item{
+  display:flex;align-items:center;gap:7px;
+  padding:6px 8px;border-radius:6px;
+  background:var(--surface2);border:1px solid var(--border);
+  cursor:pointer;transition:.15s;
+}
+.toggle-item:hover{border-color:var(--accent);background:rgba(246,130,31,.07)}
+.toggle-item input[type="checkbox"]{
+  appearance:none;width:14px;height:14px;border-radius:4px;
+  border:1.5px solid var(--border);background:transparent;
+  cursor:pointer;position:relative;flex-shrink:0;transition:.15s;
+}
+.toggle-item input[type="checkbox"]:checked{background:var(--accent);border-color:var(--accent)}
+.toggle-item input[type="checkbox"]:checked::after{
+  content:"✓";position:absolute;top:-1px;left:1px;
+  font-size:10px;color:#fff;font-weight:700;
+}
+.toggle-label{font-size:12px;color:var(--text2);flex:1}
+.toggle-item:hover .toggle-label{color:var(--text)}
+
+.param-row{display:flex;align-items:center;gap:8px;padding:4px 0}
+.param-label{font-size:12px;color:var(--text2);flex:1}
+.param-input{
+  width:60px;padding:4px 8px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:5px;
+  color:var(--text);font-size:12px;text-align:right;
+}
+.param-input:focus{border-color:var(--accent)}
+.param-unit{font-size:11px;color:var(--muted);width:24px}
+
+/* Action buttons */
+.action-area{
+  padding:10px 12px;border-top:1px solid var(--border);
+  display:flex;flex-direction:column;gap:6px;flex-shrink:0;
+}
+.btn-primary{
+  width:100%;padding:10px 0;font-size:14px;font-weight:700;
+  border-radius:var(--radius);
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  color:#fff;transition:.2s;letter-spacing:.3px;
+}
+.btn-primary:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.btn-primary:active{transform:translateY(0)}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none;filter:none}
+.btn-stop{
+  width:100%;padding:8px 0;font-size:13px;font-weight:600;
+  border-radius:var(--radius);background:transparent;
+  color:var(--red);border:1px solid var(--red);transition:.2s;display:none;
+}
+.btn-stop:hover{background:rgba(239,68,68,.1)}
+
+/* Connectivity section */
+.conn-custom-add{
+  display:flex;gap:5px;margin-top:8px;
+}
+.conn-custom-add input{
+  flex:1;padding:5px 8px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:5px;
+  color:var(--text);font-size:12px;
+}
+.conn-custom-add input:focus{border-color:var(--accent)}
+.conn-custom-add button{
+  padding:5px 10px;font-size:12px;border-radius:5px;
+  background:rgba(246,130,31,.15);border:1px solid rgba(246,130,31,.4);
+  color:var(--accent);transition:.15s;
+}
+.conn-custom-add button:hover{background:rgba(246,130,31,.3)}
+.toggle-item.custom .del-btn{
+  width:16px;height:16px;border-radius:3px;font-size:10px;
+  background:rgba(239,68,68,.12);color:var(--red);
+  display:grid;place-items:center;flex-shrink:0;
+}
+.toggle-item.custom .del-btn:hover{background:rgba(239,68,68,.25)}
+
+/* ═══════════════════════════════════════════════
+   Main content (Right Panel)
+═══════════════════════════════════════════════ */
+#main{grid-area:main;display:flex;flex-direction:column;overflow:hidden}
+
+#toolbar{
+  display:flex;align-items:center;gap:8px;padding:8px 14px;
+  background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;
+  flex-wrap:wrap;
+}
+.search-box{
+  display:flex;align-items:center;gap:6px;
+  background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius);padding:5px 10px;flex:1;min-width:140px;max-width:240px;
+}
+.search-box svg{color:var(--muted);flex-shrink:0}
+.search-box input{background:transparent;border:none;color:var(--text);font-size:13px;width:100%;user-select:text}
+.search-box input::placeholder{color:var(--muted)}
+.sort-select{
+  padding:5px 8px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius);color:var(--text2);font-size:12px;
+}
+.sort-select:focus{border-color:var(--accent)}
+.toolbar-spacer{flex:1;min-width:4px}
+.btn-toolbar{
+  display:flex;align-items:center;gap:5px;padding:5px 10px;
+  font-size:12px;font-weight:600;border-radius:var(--radius);
+  background:var(--surface2);border:1px solid var(--border);
+  color:var(--text2);transition:.2s;white-space:nowrap;
+}
+.btn-toolbar:hover{background:var(--border);color:var(--text)}
+.btn-toolbar.accent{
+  background:rgba(246,130,31,.15);border-color:rgba(246,130,31,.4);color:var(--accent);
+}
+.btn-toolbar.accent:hover{background:rgba(246,130,31,.25)}
+
+/* Stats bar */
+#stats-bar{
+  display:flex;align-items:center;gap:14px;padding:5px 14px;
+  background:var(--surface2);border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.stat-item{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2)}
+.stat-val{font-weight:600;color:var(--text)}
+.stat-val.green{color:var(--green)}
+.stat-val.yellow{color:var(--yellow)}
+.stat-val.red{color:var(--red)}
+
+#progress-bar-wrap{height:3px;background:var(--border);flex-shrink:0;display:none}
+#progress-bar{
+  height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));
+  width:0%;transition:width .3s;
+}
+
+/* Table */
+#table-wrap{flex:1;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead{position:sticky;top:0;z-index:10}
+thead tr{background:var(--surface);border-bottom:2px solid var(--border)}
+th{
+  padding:7px 9px;text-align:left;font-size:11px;font-weight:600;
+  color:var(--muted);text-transform:uppercase;letter-spacing:.6px;
+  white-space:nowrap;cursor:pointer;transition:.15s;user-select:none;
+}
+th:hover{color:var(--text)}
+th.sorted{color:var(--accent)}
+th .sort-arrow{margin-left:3px;opacity:.5}
+th.sorted .sort-arrow{opacity:1}
+/* 隐藏列 */
+th.col-hidden, td.col-hidden{display:none}
+
+tbody tr{border-bottom:1px solid rgba(42,45,62,.6);transition:background .1s}
+tbody tr:hover{background:rgba(30,33,48,.8)}
+tbody tr.selected-row{background:rgba(246,130,31,.06)}
+td{padding:7px 9px;white-space:nowrap;color:var(--text2);vertical-align:middle}
+td.primary{color:var(--text);font-weight:500;font-family:'Cascadia Code','Fira Code',monospace}
+td.remark{color:var(--text);max-width:130px;overflow:hidden;text-overflow:ellipsis}
+
+.status-badge{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 7px;border-radius:10px;font-size:11px;font-weight:600;
+}
+.status-badge.done{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.25)}
+.status-badge.testing{background:rgba(59,130,246,.12);color:var(--blue);border:1px solid rgba(59,130,246,.25)}
+.status-badge.error{background:rgba(239,68,68,.12);color:var(--red);border:1px solid rgba(239,68,68,.25)}
+.status-badge.pending{background:rgba(107,114,128,.12);color:var(--muted);border:1px solid rgba(107,114,128,.25)}
+
+.ms{font-weight:600}
+.ms.fast{color:var(--green)}
+.ms.mid{color:var(--yellow)}
+.ms.slow{color:var(--red)}
+.speed{font-weight:600}
+.speed.fast{color:var(--green)}
+.speed.mid{color:var(--text)}
+.speed.slow{color:var(--muted)}
+.flag{font-size:14px;margin-right:2px}
+
+.conn-dots{display:flex;gap:3px;align-items:center;flex-wrap:wrap}
+.conn-dot{width:7px;height:7px;border-radius:50%;cursor:default}
+.conn-dot.ok{background:var(--green)}
+.conn-dot.fail{background:var(--red)}
+.conn-dot.skip{background:var(--border)}
+
+#empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:12px;height:100%;color:var(--muted);padding:40px;
+}
+#empty-state .empty-icon{font-size:48px;opacity:.3}
+#empty-state h3{font-size:16px;font-weight:600;color:var(--text2)}
+#empty-state p{font-size:13px;text-align:center;line-height:1.6}
+
+/* ═══════════════════════════════════════════════
+   Footer
+═══════════════════════════════════════════════ */
+#footer{
+  grid-area:footer;display:flex;align-items:center;gap:14px;
+  padding:0 14px;background:var(--surface);border-top:1px solid var(--border);
+  font-size:11px;color:var(--muted);
+}
+#status-text{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ═══════════════════════════════════════════════
+   Context Menu
+═══════════════════════════════════════════════ */
+#ctx-menu{
+  position:fixed;z-index:500;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius);box-shadow:var(--shadow);
+  min-width:160px;overflow:hidden;display:none;
+}
+#ctx-menu.visible{display:block}
+.ctx-item{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 14px;font-size:13px;color:var(--text2);
+  cursor:pointer;transition:.1s;
+}
+.ctx-item:hover{background:var(--surface2);color:var(--text)}
+.ctx-item.danger:hover{background:rgba(239,68,68,.1);color:var(--red)}
+.ctx-sep{height:1px;background:var(--border);margin:3px 0}
+.ctx-item.ctx-disabled{opacity:.35;pointer-events:none}
+
+/* 拖拽选择框 */
+.sel-rect{
+  position:fixed;z-index:400;pointer-events:none;
+  border:1.5px solid var(--orange);
+  background:rgba(246,130,31,.08);
+  border-radius:2px;
+}
+
+/* 资源管理器风格：Ctrl+A 全选提示无边框 */
+#result-table th:first-child,
+#result-table td:first-child{width:32px;text-align:center}
+tbody tr.selected-row{background:rgba(246,130,31,.10)}
+
+/* ═══════════════════════════════════════════════
+   Modals
+═══════════════════════════════════════════════ */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:100;
+  display:none;align-items:center;justify-content:center;
+}
+.modal-overlay.visible{display:flex}
+.modal{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-lg);width:560px;max-height:85vh;
+  display:flex;flex-direction:column;box-shadow:var(--shadow);overflow:hidden;
+}
+.modal-sm{width:380px}
+.modal-header{
+  display:flex;align-items:center;padding:15px 18px;
+  border-bottom:1px solid var(--border);gap:10px;
+}
+.modal-title{font-size:15px;font-weight:700;flex:1}
+.modal-close{
+  width:28px;height:28px;border-radius:6px;background:var(--surface2);
+  color:var(--text2);font-size:16px;display:grid;place-items:center;transition:.15s;
+}
+.modal-close:hover{background:var(--border);color:var(--text)}
+.modal-body{padding:16px 18px;overflow-y:auto;flex:1}
+.modal-footer{
+  padding:12px 18px;border-top:1px solid var(--border);
+  display:flex;justify-content:flex-end;gap:8px;
+}
+.modal-row{margin-bottom:13px}
+.modal-label{font-size:12px;color:var(--text2);margin-bottom:5px;display:block}
+.modal-select,.modal-num,.modal-text{
+  width:100%;padding:7px 10px;background:var(--surface2);
+  border:1px solid var(--border);border-radius:var(--radius);
+  color:var(--text);font-size:13px;
+}
+.modal-text{user-select:text}
+.modal-select:focus,.modal-num:focus,.modal-text:focus{border-color:var(--accent)}
+#export-preview{
+  width:100%;height:160px;resize:none;background:var(--bg);
+  border:1px solid var(--border);border-radius:var(--radius);
+  color:var(--green);font-size:11.5px;padding:10px;
+  font-family:'Cascadia Code','Fira Code',monospace;line-height:1.6;
+  user-select:text;
+}
+.check-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.check-chip{
+  display:flex;align-items:center;gap:5px;padding:4px 10px;
+  border-radius:20px;background:var(--surface2);border:1px solid var(--border);
+  cursor:pointer;font-size:12px;color:var(--text2);transition:.15s;
+}
+.check-chip.selected{
+  background:rgba(246,130,31,.15);border-color:rgba(246,130,31,.5);color:var(--accent);
+}
+
+/* Tooltip */
+[data-tip]{position:relative}
+[data-tip]:hover::after{
+  content:attr(data-tip);position:absolute;bottom:calc(100% + 5px);left:50%;
+  transform:translateX(-50%);background:var(--surface2);border:1px solid var(--border);
+  color:var(--text);font-size:11px;padding:4px 8px;border-radius:5px;
+  white-space:nowrap;pointer-events:none;z-index:200;
+}
+
+@keyframes fadeInRow{from{opacity:0;background:rgba(246,130,31,.08)}to{opacity:1;background:transparent}}
+.new-row{animation:fadeInRow .4s ease forwards}
+.row-select{cursor:pointer;accent-color:var(--accent)}
+
+/* connectivity result item */
+.conn-res-item{
+  display:flex;align-items:center;gap:8px;padding:6px 0;
+  border-bottom:1px solid rgba(42,45,62,.5);font-size:12px;
+}
+.conn-res-item:last-child{border-bottom:none}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ───── HEADER ───── -->
+  <header id="header">
+    <div class="logo">
+      <div class="logo-icon">CF</div>
+      CF IP Tester
+    </div>
+    <span style="font-size:11px;color:var(--muted)">Cloudflare IP Benchmark Tool</span>
+    <div class="header-spacer"></div>
+    <div id="proxy-badge" data-tip="点击重新检测代理状态">
+      <span class="badge-dot" id="proxy-dot"></span>
+      <span id="proxy-text">检测中...</span>
+    </div>
+  </header>
+
+  <!-- ───── SIDEBAR ───── -->
+  <aside id="sidebar">
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="input">输入</button>
+      <button class="tab-btn" data-tab="options">选项</button>
+      <button class="tab-btn" data-tab="connectivity">连通性</button>
+    </div>
+
+    <!-- Tab: 输入 -->
+    <div class="tab-pane active" id="tab-input">
+      <div class="section">
+        <div class="section-label">
+          IP / 域名列表
+          <em class="cnt" id="entry-count">0 条</em>
+        </div>
+        <textarea id="ip-input" spellcheck="false"
+          placeholder="每行一个地址，如：地址:端口#备注&#10;IPv6 需用中括号：[2606:4700::]:2053&#10;&#10;示例：&#10;www.visa.cn#优选域名&#10;1.2.3.4:443#CFnat&#10;[2606:4700::]:2053#IPv6&#10;&#10;直接粘贴在线列表 URL：&#10;https://example.com/iplist.txt"></textarea>
+        <div class="input-actions">
+          <button class="btn-ghost" id="btn-paste-input">粘贴</button>
+          <button class="btn-ghost" id="btn-fetch">加载 URL</button>
+          <button class="btn-ghost danger" id="btn-clear-input">清空</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: 选项 -->
+    <div class="tab-pane" id="tab-options" style="overflow-y:auto">
+      <div class="option-group">
+        <div class="option-title">测试项目（已启用的列才会显示）</div>
+        <div class="toggle-grid">
+          <!-- 延迟为必选，不在此显示 -->
+          <label class="toggle-item">
+            <input type="checkbox" id="opt-geo" checked>
+            <span class="toggle-label">🌍 国家/ISP</span>
+          </label>
+          <label class="toggle-item">
+            <input type="checkbox" id="opt-download" checked>
+            <span class="toggle-label">⬇️ 下载</span>
+          </label>
+          <label class="toggle-item">
+            <input type="checkbox" id="opt-telecom" checked>
+            <span class="toggle-label">🔴 电信延迟</span>
+          </label>
+          <label class="toggle-item">
+            <input type="checkbox" id="opt-mobile" checked>
+            <span class="toggle-label">🟢 移动延迟</span>
+          </label>
+          <label class="toggle-item">
+            <input type="checkbox" id="opt-unicom" checked>
+            <span class="toggle-label">🔵 联通延迟</span>
+          </label>
+          <label class="toggle-item">
+            <input type="checkbox" id="opt-city">
+            <span class="toggle-label">🏙️ 城市</span>
+          </label>
+          <label class="toggle-item">
+            <input type="checkbox" id="opt-asn">
+            <span class="toggle-label">🔢 ASN</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="option-group">
+        <div class="option-title">参数</div>
+        <div class="param-row">
+          <span class="param-label">并发数</span>
+          <input type="number" class="param-input" id="opt-concurrency" value="8" min="1" max="64">
+          <span class="param-unit">线程</span>
+        </div>
+        <div class="param-row">
+          <span class="param-label">Ping 次数</span>
+          <input type="number" class="param-input" id="opt-ping-count" value="3" min="1" max="10">
+          <span class="param-unit">次</span>
+        </div>
+        <div class="param-row">
+          <span class="param-label">Ping 超时</span>
+          <input type="number" class="param-input" id="opt-ping-timeout" value="3" min="1" max="30" step="0.5">
+          <span class="param-unit">秒</span>
+        </div>
+        <div class="param-row">
+          <span class="param-label">下载超时</span>
+          <input type="number" class="param-input" id="opt-dl-timeout" value="10" min="1" max="60">
+          <span class="param-unit">秒</span>
+        </div>
+        <div class="param-row">
+          <span class="param-label">测速大小</span>
+          <input type="number" class="param-input" id="opt-dl-size" value="5" min="1" max="100">
+          <span class="param-unit">MB</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: 连通性 -->
+    <div class="tab-pane" id="tab-connectivity" style="overflow-y:auto">
+      <div class="option-group">
+        <div class="option-title">选择检测目标</div>
+        <div class="toggle-grid" id="connectivity-toggles"></div>
+        <div class="conn-custom-add" style="margin-top:10px">
+          <input type="text" id="conn-add-name" placeholder="名称 (如 Netflix)" style="max-width:90px">
+          <input type="text" id="conn-add-host" placeholder="host 或 IP">
+          <input type="number" id="conn-add-port" placeholder="端口" value="443" style="max-width:56px">
+          <button id="conn-add-btn">添加</button>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;padding:8px;background:var(--surface2);border-radius:6px;border:1px solid var(--border)">
+          连通性测试检测本机网络可达性，与 CF IP 测试无关。可在测试 CF IP 时同步测，也可单独触发。
+        </div>
+      </div>
+      <div class="option-group">
+        <button class="btn-primary" id="btn-test-connectivity" style="margin-top:0">立即检测连通性</button>
+      </div>
+      <div id="connectivity-results" class="option-group" style="padding-top:0"></div>
+    </div>
+
+    <!-- Action buttons -->
+    <div class="action-area">
+      <button class="btn-primary" id="btn-start" disabled>▶ 开始测试</button>
+      <button class="btn-stop" id="btn-stop">⬛ 停止测试</button>
+      <div style="display:flex;gap:5px">
+        <button class="btn-ghost" style="flex:1" id="btn-export">导出结果</button>
+        <button class="btn-ghost" style="flex:1" id="btn-clear-results">清空结果</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ───── MAIN ───── -->
+  <main id="main">
+    <div id="toolbar">
+      <button id="sidebar-toggle" title="显示/隐藏侧边栏">☰</button>
+      <div class="search-box">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" id="search-input" placeholder="搜索 IP、备注、国家...">
+      </div>
+      <select class="sort-select" id="sort-field">
+        <option value="ping">延迟</option>
+        <option value="download">下载速度</option>
+        <option value="country">国家</option>
+        <option value="telecom">电信延迟</option>
+        <option value="mobile">移动延迟</option>
+        <option value="unicom">联通延迟</option>
+      </select>
+      <select class="sort-select" id="sort-dir">
+        <option value="asc">升序 ↑</option>
+        <option value="desc">降序 ↓</option>
+      </select>
+      <div class="toolbar-spacer"></div>
+      <button class="btn-toolbar accent" id="btn-retest" title="重新测试当前结果列表">🔄 测试</button>
+      <button class="btn-toolbar" id="btn-select-all">全选</button>
+      <button class="btn-toolbar accent" id="btn-export-selected">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+        </svg>
+        导出选中
+      </button>
+      <button class="btn-toolbar" id="btn-copy-best">复制最优 10</button>
+    </div>
+
+    <div id="stats-bar">
+      <div class="stat-item">总计 <span class="stat-val" id="s-total">0</span></div>
+      <div class="stat-item">测试中 <span class="stat-val yellow" id="s-testing">0</span></div>
+      <div class="stat-item">成功 <span class="stat-val green" id="s-done">0</span></div>
+      <div class="stat-item">失败 <span class="stat-val red" id="s-error">0</span></div>
+      <div class="stat-item">最低延迟 <span class="stat-val green" id="s-best-ping">—</span></div>
+      <div class="stat-item">最高下载 <span class="stat-val green" id="s-best-dl">—</span></div>
+      <div class="toolbar-spacer"></div>
+      <span id="progress-text" style="font-size:11px;color:var(--muted)"></span>
+    </div>
+
+    <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+
+    <div id="table-wrap">
+      <div id="empty-state">
+        <div class="empty-icon">⚡</div>
+        <h3>CF IP 优选测试工具</h3>
+        <p>在左侧输入 IP 地址或域名<br>配置测试选项后点击「开始测试」</p>
+      </div>
+      <table id="result-table" style="display:none">
+        <thead>
+          <tr id="table-header-row">
+            <th style="width:30px"><input type="checkbox" id="check-all" class="row-select"></th>
+            <th data-col="address">地址 <span class="sort-arrow">↑</span></th>
+            <th data-col="port">端口</th>
+            <th data-col="remark">备注</th>
+            <th data-col="status">状态</th>
+            <th data-col="ping" class="sorted">延迟 <span class="sort-arrow">↑</span></th>
+            <th data-col="download" class="col-opt" data-opt="opt-download">下载</th>
+            <th data-col="country" class="col-opt" data-opt="opt-geo">国家</th>
+            <th data-col="isp" class="col-opt" data-opt="opt-geo">ISP</th>
+            <th data-col="city" class="col-opt" data-opt="opt-city">城市</th>
+            <th data-col="asn" class="col-opt" data-opt="opt-asn">ASN</th>
+            <th data-col="telecom" class="col-opt" data-opt="opt-telecom">电信</th>
+            <th data-col="mobile" class="col-opt" data-opt="opt-mobile">移动</th>
+            <th data-col="unicom" class="col-opt" data-opt="opt-unicom">联通</th>
+            <th data-col="connectivity" id="th-connectivity" style="display:none">连通性</th>
+          </tr>
+        </thead>
+        <tbody id="result-body"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <!-- ───── FOOTER ───── -->
+  <footer id="footer">
+    <span id="status-text">就绪</span>
+    <span>|</span>
+    <span>CF IP Tester v2.0</span>
+    <span>|</span>
+    <span id="time-text"></span>
+  </footer>
+</div>
+
+<!-- ═══ Context Menu ═══ -->
+<div id="ctx-menu">
+  <div class="ctx-item" id="ctx-copy">📋 复制</div>
+  <div class="ctx-item" id="ctx-paste">📥 粘贴</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctx-test-selected">🔄 测试选择</div>
+  <div class="ctx-item" id="ctx-delete-selected">🗑️ 删除所选</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item" id="ctx-clear-remark">✏️ 清除备注</div>
+  <div class="ctx-item" id="ctx-dedup-results">⚡ 清除重复行</div>
+  <div class="ctx-sep"></div>
+  <div class="ctx-item danger" id="ctx-clear-all">🗑️ 清空列表</div>
+</div>
+
+<!-- ═══ Export Modal ═══ -->
+<div class="modal-overlay" id="export-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📤 导出结果</span>
+      <button class="modal-close" id="export-modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-row">
+        <label class="modal-label">格式</label>
+        <select class="modal-select" id="export-fmt">
+          <option value="edgetunnel">EdgeTunnel 格式（地址:端口#备注|字段…）</option>
+          <option value="csv">CSV 格式</option>
+        </select>
+      </div>
+      <div class="modal-row">
+        <label class="modal-label">排序</label>
+        <select class="modal-select" id="export-sort">
+          <option value="ping">延迟（低→高）</option>
+          <option value="download">下载速度（高→低）</option>
+          <option value="country">国家</option>
+        </select>
+      </div>
+      <div class="modal-row">
+        <label class="modal-label">导出数量（0 = 全部）</label>
+        <input type="number" class="modal-num" id="export-topn" value="0" min="0">
+      </div>
+      <div class="modal-row">
+        <label class="modal-label">附加字段（追加到备注后，| 分隔）</label>
+        <div class="check-row" id="export-fields">
+          <div class="check-chip selected" data-field="country">🌍 国家</div>
+          <div class="check-chip selected" data-field="download">⬇️ 下载速度</div>
+          <div class="check-chip selected" data-field="ping">📡 延迟</div>
+          <div class="check-chip" data-field="city">🏙️ 城市</div>
+          <div class="check-chip" data-field="isp">📶 ISP</div>
+          <div class="check-chip" data-field="telecom">🔴 电信</div>
+          <div class="check-chip" data-field="mobile">🟢 移动</div>
+          <div class="check-chip" data-field="unicom">🔵 联通</div>
+        </div>
+      </div>
+      <div class="modal-row">
+        <label class="modal-label">预览</label>
+        <textarea id="export-preview" readonly></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-ghost" id="export-copy-btn" style="padding:8px 16px">复制到剪贴板</button>
+      <button class="btn-primary" id="export-save-btn" style="padding:8px 22px;width:auto">保存为文件</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  State
+// ═══════════════════════════════════════════════
+const state = {
+  entries: [],
+  filtered: [],
+  selected: new Set(),
+  testing: false,
+  sortField: 'ping',
+  sortAsc: true,
+  searchQ: '',
+  total: 0,
+  done: 0,
+  error: 0,
+  ctxTargetAddr: null,   // 右键菜单目标行地址
+  lastClickedIdx: -1,     // Shift+Click 范围选择辅助
+  dragActive: false,
+  dragStart: null,         // {x, y}
+  dragRectEl: null,        // 拖拽选择框 DOM
+  dragMode: 'add',         // 'add' 或 'remove'
+};
+
+// ═══════════════════════════════════════════════
+//  PyWebView bridge
+// ═══════════════════════════════════════════════
+async function api(method, ...args) {
+  if (window.pywebview && window.pywebview.api) {
+    return await window.pywebview.api[method](...args);
+  }
+  return mockApi(method, args);
+}
+
+window._cfBridge = function(payloadStr) {
+  try {
+    const { event, data } = JSON.parse(payloadStr);
+    handleEvent(event, data);
+  } catch(e) { console.error('[Bridge]', e); }
+};
+
+function handleEvent(event, data) {
+  if (event === 'progress') {
+    updateEntry(data);
+    updateStats();
+  } else if (event === 'done') {
+    onTestDone();
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  Init
+// ═══════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', async () => {
+  initTabs();
+  initSidebarToggle();
+  initTableSort();
+  initSearch();
+  initButtons();
+  initExportModal();
+  initContextMenu();
+  initDragSelection();
+  initOptionWatcher();
+  startClock();
+
+  // 加载保存的设置（恢复配置）
+  await restoreSettings();
+  // 加载保存的 IP 列表
+  await restoreIpList();
+
+  await checkProxy();
+  await loadConnectivityTargets();
+
+  // 监听选项变化，自动保存
+  watchSettingsChange();
+});
+
+// ═══════════════════════════════════════════════
+//  Proxy detection
+// ═══════════════════════════════════════════════
+async function checkProxy() {
+  document.getElementById('proxy-text').textContent = '检测中...';
+  document.getElementById('proxy-dot').className = 'badge-dot';
+  try {
+    const result = await api('check_proxy');
+    const dot = document.getElementById('proxy-dot');
+    const txt = document.getElementById('proxy-text');
+    if (result && result.has_proxy) {
+      dot.className = 'badge-dot warn';
+      const types = (result.proxy_type || []).join(', ');
+      txt.textContent = '⚠️ 检测到代理';
+      const detail = (result.proxy_type || []).map(t => {
+        if (t.startsWith('pac:')) return 'PAC: ' + t.slice(4);
+        if (t.startsWith('system:')) return '系统代理: ' + t.slice(7);
+        if (t.startsWith('env:')) return '环境变量: ' + t.slice(4);
+        if (t.startsWith('tun:')) return 'TUN: ' + t.slice(4);
+        return t;
+      }).join(' | ');
+      setStatus('⚠️ 检测到代理/VPN：' + detail + ' — 建议关闭后再测试');
+    } else {
+      dot.className = 'badge-dot ok';
+      txt.textContent = '✓ 无代理';
+      setStatus('就绪 · 未检测到代理，可以开始测试');
+    }
+  } catch(e) {
+    document.getElementById('proxy-text').textContent = '检测失败';
+  }
+}
+document.getElementById('proxy-badge').addEventListener('click', checkProxy);
+
+// ═══════════════════════════════════════════════
+//  Sidebar toggle
+// ═══════════════════════════════════════════════
+let sidebarVisible = true;
+function initSidebarToggle() {
+  document.getElementById('sidebar-toggle').addEventListener('click', () => {
+    sidebarVisible = !sidebarVisible;
+    document.getElementById('app').classList.toggle('sidebar-hidden', !sidebarVisible);
+    saveSettings();
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  Tabs
+// ═══════════════════════════════════════════════
+function initTabs() {
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const tab = btn.dataset.tab;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('tab-' + tab).classList.add('active');
+      saveSettings();
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════
+//  Option watcher (动态列显示)
+// ═══════════════════════════════════════════════
+function initOptionWatcher() {
+  // 每个带 data-opt 的 th，根据对应 checkbox 状态显示/隐藏
+  function syncCols() {
+    document.querySelectorAll('th.col-opt').forEach(th => {
+      const optId = th.dataset.opt;
+      const checked = document.getElementById(optId)?.checked !== false;
+      const colIdx = th.cellIndex;
+      th.classList.toggle('col-hidden', !checked);
+      // 同步所有 tbody td
+      document.querySelectorAll(`#result-body tr`).forEach(tr => {
+        const td = tr.cells[colIdx];
+        if (td) td.classList.toggle('col-hidden', !checked);
+      });
+    });
+    // 连通性列：只要有至少一个 conn-check 被选中就显示
+    const hasConn = document.querySelectorAll('.conn-check:checked').length > 0;
+    document.getElementById('th-connectivity').style.display = hasConn ? '' : 'none';
+    document.querySelectorAll('.td-connectivity').forEach(td => {
+      td.style.display = hasConn ? '' : 'none';
+    });
+  }
+
+  document.querySelectorAll('th.col-opt').forEach(th => {
+    const optId = th.dataset.opt;
+    document.getElementById(optId)?.addEventListener('change', () => {
+      syncCols();
+      saveSettings();
+    });
+  });
+  // 初始同步
+  syncCols();
+  // 导出给外部调用
+  window._syncCols = syncCols;
+}
+
+// ═══════════════════════════════════════════════
+//  Connectivity toggles
+// ═══════════════════════════════════════════════
+const CONN_ICONS = {
+  Cloudflare:'☁️', Google:'🔍', YouTube:'▶️', GitHub:'🐙',
+  ChatGPT:'🤖', Apple:'🍎', Telegram:'✈️',
+};
+
+async function loadConnectivityTargets() {
+  let targets = [];
+  try {
+    const r = await api('get_connectivity_targets_full');
+    if (r && r.length) targets = r;
+  } catch(e) {
+    ['Cloudflare','Google','YouTube','GitHub','ChatGPT','Apple','Telegram'].forEach(n => {
+      targets.push({ name: n, builtin: true });
+    });
+  }
+
+  const container = document.getElementById('connectivity-toggles');
+  container.innerHTML = '';
+  const savedConn = (window._savedSettings && window._savedSettings.conn_checked) || [];
+
+  targets.forEach(t => renderConnTarget(t, savedConn, container));
+
+  // 监听连通性 checkbox 变化
+  container.addEventListener('change', () => {
+    if (window._syncCols) window._syncCols();
+    saveSettings();
+  });
+}
+
+function renderConnTarget(t, savedChecked, container) {
+  const name = t.name || t;
+  const isBuiltin = t.builtin !== false;
+  const wasChecked = savedChecked.length ? savedChecked.includes(name) : false;
+
+  const label = document.createElement('label');
+  label.className = 'toggle-item' + (isBuiltin ? '' : ' custom');
+  label.innerHTML = `
+    <input type="checkbox" class="conn-check" data-name="${escHtml(name)}" ${wasChecked ? 'checked' : ''}>
+    <span class="toggle-label">${CONN_ICONS[name] || '🌐'} ${escHtml(name)}</span>
+    ${!isBuiltin ? `<button class="del-btn" data-name="${escHtml(name)}" title="删除" onclick="delConnTarget(event,'${escHtml(name)}')">✕</button>` : ''}
+  `;
+  container.appendChild(label);
+}
+
+async function delConnTarget(event, name) {
+  event.preventDefault(); event.stopPropagation();
+  if (!confirm(`删除自定义目标 "${name}"？`)) return;
+  try { await api('remove_connectivity_target', name); } catch(e) {}
+  await loadConnectivityTargets();
+  saveSettings();
+}
+
+document.getElementById('conn-add-btn').addEventListener('click', async () => {
+  const name = document.getElementById('conn-add-name').value.trim();
+  const host = document.getElementById('conn-add-host').value.trim();
+  const port = parseInt(document.getElementById('conn-add-port').value) || 443;
+  if (!name || !host) { alert('请填写名称和主机'); return; }
+  try {
+    await api('add_connectivity_target', name, host, port);
+    document.getElementById('conn-add-name').value = '';
+    document.getElementById('conn-add-host').value = '';
+    document.getElementById('conn-add-port').value = '443';
+    await loadConnectivityTargets();
+    saveSettings();
+    setStatus(`已添加连通性目标：${name}`);
+  } catch(e) { alert('添加失败：' + e.message); }
+});
+
+// ═══════════════════════════════════════════════
+//  Input handling
+// ═══════════════════════════════════════════════
+const ipInput = document.getElementById('ip-input');
+ipInput.addEventListener('input', debounce(onInputChange, 350));
+
+async function onInputChange() {
+  const text = ipInput.value.trim();
+  if (!text) {
+    document.getElementById('entry-count').textContent = '0 条';
+    document.getElementById('btn-start').disabled = true;
+    return;
+  }
+
+  const lines = text.split('\n');
+  const urlLines   = lines.filter(l => /^\s*https?:\/\//i.test(l.trim())).length;
+  const localLines = lines.filter(l => {
+    const s = l.trim();
+    return s && !s.startsWith('#') && !s.startsWith('//') && !/^https?:\/\//i.test(s);
+  }).length;
+
+  if (urlLines > 0 && localLines === 0) {
+    document.getElementById('entry-count').textContent = `${urlLines} 个URL`;
+    document.getElementById('btn-start').disabled = false;
+    return;
+  }
+  if (urlLines > 0) {
+    document.getElementById('entry-count').textContent = `${localLines} 条 + ${urlLines} URL`;
+    document.getElementById('btn-start').disabled = false;
+    return;
+  }
+
+  try {
+    const entries = await api('parse_entries', text);
+    document.getElementById('entry-count').textContent = `${entries.length} 条`;
+    document.getElementById('btn-start').disabled = entries.length === 0;
+  } catch(e) {
+    document.getElementById('btn-start').disabled = localLines === 0;
+  }
+}
+
+// ─── 去重（域名+端口相同视为重复）───────────────
+function dedupInput() {
+  const lines = ipInput.value.split('\n');
+  const seen = new Set();
+  const result = [];
+  for (const line of lines) {
+    const s = line.trim();
+    if (!s || s.startsWith('#') || s.startsWith('//') || /^https?:\/\//i.test(s)) {
+      result.push(line);
+      continue;
+    }
+    // 提取 address:port（忽略备注）
+    let key = s.split('#')[0].trim().toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      result.push(line);
+    }
+  }
+  const before = lines.length;
+  ipInput.value = result.join('\n');
+  const removed = before - result.length;
+  onInputChange();
+  setStatus(`已去除 ${removed} 条重复行`);
+}
+
+// ─── 清除备注 ────────────────────────────────
+function clearRemarks() {
+  const lines = ipInput.value.split('\n').map(line => {
+    const s = line.trim();
+    if (!s || s.startsWith('#') || s.startsWith('//') || /^https?:\/\//i.test(s)) return line;
+    return s.split('#')[0].trim();
+  });
+  ipInput.value = lines.join('\n');
+  onInputChange();
+  setStatus('已清除所有备注');
+}
+
+// ═══════════════════════════════════════════════
+//  Buttons
+// ═══════════════════════════════════════════════
+function initButtons() {
+  document.getElementById('btn-clear-input').addEventListener('click', () => {
+    ipInput.value = '';
+    onInputChange();
+  });
+
+  document.getElementById('btn-paste-input').addEventListener('click', async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      ipInput.value += (ipInput.value ? '\n' : '') + text;
+      onInputChange();
+    } catch(e) {
+      alert('无法读取剪贴板，请手动粘贴（Ctrl+V）');
+    }
+  });
+
+  document.getElementById('btn-fetch').addEventListener('click', onFetchUrl);
+  document.getElementById('btn-start').addEventListener('click', onStartTest);
+  document.getElementById('btn-stop').addEventListener('click', onStopTest);
+  document.getElementById('btn-export').addEventListener('click', () => openExportModal(false));
+  document.getElementById('btn-export-selected').addEventListener('click', () => openExportModal(true));
+  document.getElementById('btn-clear-results').addEventListener('click', clearResults);
+  document.getElementById('btn-select-all').addEventListener('click', toggleSelectAll);
+  document.getElementById('btn-copy-best').addEventListener('click', copyBest);
+  document.getElementById('btn-retest').addEventListener('click', () => { retestSelected(); });
+  document.getElementById('btn-test-connectivity').addEventListener('click', runConnectivityTest);
+
+  document.getElementById('check-all').addEventListener('change', function() {
+    document.querySelectorAll('.row-select').forEach(cb => cb.checked = this.checked);
+    state.filtered.forEach(e => {
+      if (this.checked) state.selected.add(e.address);
+      else state.selected.delete(e.address);
+    });
+    document.querySelectorAll('#result-body tr').forEach(tr => {
+      tr.classList.toggle('selected-row', this.checked);
+    });
+  });
+}
+
+async function onFetchUrl() {
+  const url = prompt('输入在线 URL（txt 或 API）：\n（也可直接粘贴 URL 到输入框，测试时自动拉取）');
+  if (!url || !url.trim()) return;
+  const trimmed = url.trim();
+  if (!/^https?:\/\//i.test(trimmed)) {
+    alert('请输入以 http:// 或 https:// 开头的 URL');
+    return;
+  }
+  ipInput.value += (ipInput.value ? '\n' : '') + trimmed;
+  onInputChange();
+  setStatus(`已添加 URL（测试时自动拉取）`);
+}
+
+async function onStartTest() {
+  const text = ipInput.value.trim();
+  if (!text) return;
+
+  // 保存 IP 列表
+  try { await api('save_ip_list', text); } catch(e) {}
+
+  const options = {
+    geo:              document.getElementById('opt-geo').checked,
+    download:         document.getElementById('opt-download').checked,
+    isp_test:         document.getElementById('opt-telecom').checked ||
+                      document.getElementById('opt-mobile').checked ||
+                      document.getElementById('opt-unicom').checked,
+    telecom:          document.getElementById('opt-telecom').checked,
+    mobile:           document.getElementById('opt-mobile').checked,
+    unicom:           document.getElementById('opt-unicom').checked,
+    concurrency:      parseInt(document.getElementById('opt-concurrency').value) || 8,
+    ping_count:       parseInt(document.getElementById('opt-ping-count').value) || 3,
+    ping_timeout:     parseFloat(document.getElementById('opt-ping-timeout').value) || 3,
+    download_timeout: parseFloat(document.getElementById('opt-dl-timeout').value) || 10,
+    download_size_mb: parseFloat(document.getElementById('opt-dl-size').value) || 5,
+    connectivity_targets: Array.from(
+      document.querySelectorAll('.conn-check:checked')
+    ).map(c => c.dataset.name),
+  };
+
+  state.entries = [];
+  state.done = 0;
+  state.error = 0;
+  state.testing = true;
+  clearTable();
+  showTable(true);
+
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-stop').style.display = 'block';
+  document.getElementById('progress-bar-wrap').style.display = 'block';
+  setStatus('测试中...');
+
+  try {
+    const result = await api('start_test', text, options);
+    if (result && result.ok) {
+      state.total = result.total;
+      updateStats();
+      setStatus(`测试中 · 共 ${result.total} 条`);
+    } else {
+      setStatus('启动失败：' + (result && result.msg || '未知错误'));
+      onTestDone();
+    }
+  } catch(e) {
+    setStatus('错误：' + e.message);
+    onTestDone();
+  }
+}
+
+async function onStopTest() {
+  await api('stop_test');
+  onTestDone();
+  setStatus('已停止');
+}
+
+function onTestDone() {
+  state.testing = false;
+  document.getElementById('btn-start').disabled = false;
+  document.getElementById('btn-stop').style.display = 'none';
+  document.getElementById('progress-bar-wrap').style.display = 'none';
+  document.getElementById('progress-bar').style.width = '0%';
+  updateStats();
+  setStatus(`测试完成 · ${state.done} 成功 / ${state.error} 失败`);
+}
+
+// ── 重新测试：对当前结果列表中的条目（或选中条目）重新测试 ──
+async function retestSelected() {
+  // 确定要测的列表
+  let testEntries = null;  // null=全部
+  if (state.selected.size > 0) {
+    testEntries = state.entries.filter(e => state.selected.has(e.address));
+  }
+  if (!testEntries && state.entries.length === 0) {
+    setStatus('没有可测试的条目');
+    return;
+  }
+
+  const options = {
+    geo:              document.getElementById('opt-geo').checked,
+    download:         document.getElementById('opt-download').checked,
+    isp_test:         document.getElementById('opt-telecom').checked ||
+                      document.getElementById('opt-mobile').checked ||
+                      document.getElementById('opt-unicom').checked,
+    telecom:          document.getElementById('opt-telecom').checked,
+    mobile:           document.getElementById('opt-mobile').checked,
+    unicom:           document.getElementById('opt-unicom').checked,
+    concurrency:      parseInt(document.getElementById('opt-concurrency').value) || 8,
+    ping_count:       parseInt(document.getElementById('opt-ping-count').value) || 3,
+    ping_timeout:     parseFloat(document.getElementById('opt-ping-timeout').value) || 3,
+    download_timeout: parseFloat(document.getElementById('opt-dl-timeout').value) || 10,
+    download_size_mb: parseFloat(document.getElementById('opt-dl-size').value) || 5,
+    connectivity_targets: Array.from(
+      document.querySelectorAll('.conn-check:checked')
+    ).map(c => c.dataset.name),
+  };
+
+  // 重置状态
+  if (testEntries) {
+    // 只重置选中条目的状态
+    testEntries.forEach(e => {
+      e.status = 'pending'; e.ping_ms = null; e.download_speed = null;
+      e.country = null; e.country_code = null; e.city = null;
+      e.isp = null; e.asn = null;
+      e.telecom_ms = null; e.mobile_ms = null; e.unicom_ms = null;
+      e.connectivity = {}; e.error = '';
+    });
+    state.done = 0; state.error = 0;
+    // 统计所有 entries 的状态
+    state.entries.forEach(e => { if (e.status === 'done') state.done++; if (e.status === 'error') state.error++; });
+  } else {
+    state.entries.forEach(e => {
+      e.status = 'pending'; e.ping_ms = null; e.download_speed = null;
+      e.country = null; e.country_code = null; e.city = null;
+      e.isp = null; e.asn = null;
+      e.telecom_ms = null; e.mobile_ms = null; e.unicom_ms = null;
+      e.connectivity = {}; e.error = '';
+    });
+    state.done = 0; state.error = 0;
+  }
+
+  state.testing = true;
+  state.total = testEntries ? testEntries.length : state.entries.length;
+  document.getElementById('btn-start').disabled = true;
+  document.getElementById('btn-stop').style.display = 'block';
+  document.getElementById('progress-bar-wrap').style.display = 'block';
+
+  try {
+    // 构造原始文本：从现有 entries 重建 raw 格式
+    const sourceList = testEntries || state.entries;
+    const textLines = sourceList.map(e => {
+      let line = e.address + ':' + e.port;
+      if (e.remark) line += '#' + e.remark;
+      return line;
+    }).join('\n');
+
+    const result = await api('start_test', textLines, options);
+    if (result && result.ok) {
+      state.total = result.total;
+      updateStats();
+      setStatus(`重新测试中 · 共 ${result.total} 条`);
+    } else {
+      setStatus('启动失败：' + (result && result.msg || '未知错误'));
+      onTestDone();
+    }
+  } catch(e) {
+    setStatus('错误：' + e.message);
+    onTestDone();
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  Entry updates
+// ═══════════════════════════════════════════════
+function updateEntry(entry) {
+  const idx = state.entries.findIndex(e => e.address === entry.address && e.port === entry.port);
+  if (idx === -1) {
+    state.entries.push(entry);
+    addTableRow(entry, true);
+  } else {
+    state.entries[idx] = entry;
+    updateTableRow(entry);
+  }
+  if (entry.status === 'done') state.done++;
+  if (entry.status === 'error') state.error++;
+  updateProgress();
+}
+
+function updateProgress() {
+  const finished = state.done + state.error;
+  const pct = state.total ? (finished / state.total * 100).toFixed(0) : 0;
+  document.getElementById('progress-bar').style.width = pct + '%';
+  document.getElementById('progress-text').textContent =
+    state.total ? `${finished} / ${state.total}` : '';
+}
+
+// ═══════════════════════════════════════════════
+//  Table rendering
+// ═══════════════════════════════════════════════
+function showTable(show) {
+  document.getElementById('result-table').style.display = show ? '' : 'none';
+  document.getElementById('empty-state').style.display = show ? 'none' : '';
+}
+
+function clearTable() {
+  document.getElementById('result-body').innerHTML = '';
+}
+
+function clearResults() {
+  state.entries = [];
+  state.filtered = [];
+  state.selected.clear();
+  state.total = 0;
+  state.done = 0;
+  state.error = 0;
+  clearTable();
+  showTable(false);
+  updateStats();
+  setStatus('就绪');
+}
+
+function addTableRow(entry, animate = false) {
+  const tbody = document.getElementById('result-body');
+  const tr = buildRow(entry);
+  if (animate) tr.classList.add('new-row');
+  tbody.appendChild(tr);
+  if (window._syncCols) window._syncCols();
+}
+
+function updateTableRow(entry) {
+  const row = document.getElementById('row-' + rowId(entry.address, entry.port));
+  if (!row) return;
+  const tr = buildRow(entry);
+  row.replaceWith(tr);
+  if (window._syncCols) window._syncCols();
+}
+
+function rowId(addr, port) {
+  return (addr + '_' + port).replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+function buildRow(e) {
+  const hasConn = e.connectivity && Object.keys(e.connectivity).length > 0;
+  const showConn = document.querySelectorAll('.conn-check:checked').length > 0;
+
+  const tr = document.createElement('tr');
+  tr.id = 'row-' + rowId(e.address, e.port);
+  if (state.selected.has(e.address)) tr.classList.add('selected-row');
+
+  // 动态列隐藏 helper
+  const colHidden = (optId) => {
+    const el = document.getElementById(optId);
+    return el && !el.checked ? ' col-hidden' : '';
+  };
+
+  tr.innerHTML = `
+    <td><input type="checkbox" class="row-select" data-addr="${e.address}" ${state.selected.has(e.address) ? 'checked' : ''}></td>
+    <td class="primary">${escHtml(e.address)}</td>
+    <td>${e.port}</td>
+    <td class="remark" title="${escHtml(e.remark)}">${escHtml(e.remark || '—')}</td>
+    <td>${statusBadge(e)}</td>
+    <td>${msCell(e.ping_ms)}</td>
+    <td class="col-opt${colHidden('opt-download')}">${speedCell(e.download_speed)}</td>
+    <td class="col-opt${colHidden('opt-geo')}">${countryCell(e)}</td>
+    <td class="col-opt${colHidden('opt-geo')}" style="max-width:130px;overflow:hidden;text-overflow:ellipsis;color:var(--muted)">${escHtml(e.isp || '—')}</td>
+    <td class="col-opt${colHidden('opt-city')}" style="color:var(--muted)">${escHtml(e.city || '—')}</td>
+    <td class="col-opt${colHidden('opt-asn')}" style="color:var(--muted);font-size:11px">${escHtml(e.asn || '—')}</td>
+    <td class="col-opt${colHidden('opt-telecom')}">${msCell(e.telecom_ms)}</td>
+    <td class="col-opt${colHidden('opt-mobile')}">${msCell(e.mobile_ms)}</td>
+    <td class="col-opt${colHidden('opt-unicom')}">${msCell(e.unicom_ms)}</td>
+    <td class="td-connectivity" style="${showConn ? '' : 'display:none'}">${connCell(e.connectivity)}</td>
+  `;
+
+  tr.querySelector('.row-select').addEventListener('change', function() {
+    if (this.checked) { state.selected.add(e.address); tr.classList.add('selected-row'); }
+    else { state.selected.delete(e.address); tr.classList.remove('selected-row'); }
+  });
+
+  // 右键菜单
+  tr.addEventListener('contextmenu', (ev) => {
+    ev.preventDefault();
+    state.ctxTargetAddr = e.address;
+    showCtxMenu(ev.clientX, ev.clientY);
+  });
+
+  return tr;
+}
+
+function statusBadge(e) {
+  const labels = { done:'✓ 完成', testing:'⟳ 测试中', error:'✕ 失败', pending:'· 等待中' };
+  const tip = e.error ? ` title="${escHtml(e.error)}"` : '';
+  return `<span class="status-badge ${e.status}"${tip}>${labels[e.status] || e.status}</span>`;
+}
+
+function msCell(ms) {
+  if (ms === null || ms === undefined) return '<span style="color:var(--muted)">—</span>';
+  let cls = 'fast';
+  if (ms > 200) cls = 'slow';
+  else if (ms > 100) cls = 'mid';
+  return `<span class="ms ${cls}">${ms.toFixed(0)} ms</span>`;
+}
+
+function speedCell(s) {
+  if (s === null || s === undefined) return '<span style="color:var(--muted)">—</span>';
+  let cls = 'fast';
+  if (s < 1) cls = 'slow';
+  else if (s < 10) cls = 'mid';
+  return `<span class="speed ${cls}">${s >= 1 ? s.toFixed(1) : s.toFixed(3)} Mbps</span>`;
+}
+
+function countryCell(e) {
+  if (!e.country) return '<span style="color:var(--muted)">—</span>';
+  const flag = e.country_code ? countryFlag(e.country_code) : '';
+  return `<span>${flag} ${escHtml(e.country)}</span>`;
+}
+
+function countryFlag(cc) {
+  if (!cc || cc.length !== 2) return '';
+  const cp = [...cc.toUpperCase()].map(c => 0x1F1E6 + c.charCodeAt(0) - 65);
+  return String.fromCodePoint(...cp);
+}
+
+function connCell(conn) {
+  if (!conn || !Object.keys(conn).length) return '<span style="color:var(--muted)">—</span>';
+  return '<div class="conn-dots">' +
+    Object.entries(conn).map(([k, v]) =>
+      `<span class="conn-dot ${v.ok ? 'ok' : 'fail'}" data-tip="${k}: ${v.ok ? '✓' : '✕'}${v.latency_ms ? ' '+v.latency_ms.toFixed(0)+'ms' : ''}"></span>`
+    ).join('') + '</div>';
+}
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ═══════════════════════════════════════════════
+//  Context Menu
+// ═══════════════════════════════════════════════
+function initContextMenu() {
+  const menu = document.getElementById('ctx-menu');
+
+  // 显示
+  function showCtxMenu(x, y) {
+    menu.style.left = Math.min(x, window.innerWidth - 180) + 'px';
+    menu.style.top  = Math.min(y, window.innerHeight - 200) + 'px';
+    menu.classList.add('visible');
+    // 根据状态禁用/启用菜单项
+    const hasAny   = state.entries.length > 0;
+    const hasSel   = state.selected.size > 0;
+    menu.querySelector('#ctx-delete-selected')?.classList.toggle('ctx-disabled', !hasSel);
+    menu.querySelector('#ctx-test-selected')?.classList.toggle('ctx-disabled', !hasAny);
+    menu.querySelector('#ctx-clear-remark')?.classList.toggle('ctx-disabled', !hasAny);
+    menu.querySelector('#ctx-dedup-results')?.classList.toggle('ctx-disabled', !hasAny);
+    menu.querySelector('#ctx-clear-all')?.classList.toggle('ctx-disabled', !hasAny);
+    menu.querySelector('#ctx-copy')?.classList.toggle('ctx-disabled', !hasAny);
+    // 粘贴始终可用
+  }
+  window.showCtxMenu = showCtxMenu;
+
+  // 关闭
+  document.addEventListener('click', () => menu.classList.remove('visible'));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') menu.classList.remove('visible'); });
+
+  // 复制所选（有选中的复制所有选中行，否则复制右键目标行）
+  document.getElementById('ctx-copy').addEventListener('click', async () => {
+    let copyEntries = [];
+    if (state.selected.size > 0) {
+      copyEntries = state.entries.filter(e => state.selected.has(e.address));
+    } else {
+      const entry = state.entries.find(e => e.address === state.ctxTargetAddr);
+      if (entry) copyEntries = [entry];
+    }
+    if (!copyEntries.length) return;
+    const lines = copyEntries.map(entry => {
+      const isV6 = entry.address.includes(':') && !entry.address.includes('.');
+      const addrPart = isV6 ? `[${entry.address}]` : entry.address;
+      const parts = [
+        entry.remark || entry.address,
+        entry.country,
+        entry.download_speed ? entry.download_speed.toFixed(1) + 'Mbps' : null,
+        entry.ping_ms ? entry.ping_ms.toFixed(0) + 'ms' : null,
+      ].filter(Boolean);
+      return `${addrPart}:${entry.port}#${parts.join('|')}`;
+    });
+    try { await navigator.clipboard.writeText(lines.join('\n')); }
+    catch(e) { alert(lines.join('\n')); return; }
+    setStatus(`已复制 ${lines.length} 条到剪贴板`);
+  });
+
+  // 粘贴
+  document.getElementById('ctx-paste').addEventListener('click', async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      ipInput.value += (ipInput.value ? '\n' : '') + text;
+      onInputChange();
+      // 切到输入 tab
+      document.querySelector('[data-tab="input"]').click();
+    } catch(e) { alert('无法读取剪贴板'); }
+  });
+
+  // 删除所选
+  document.getElementById('ctx-delete-selected').addEventListener('click', () => {
+    state.entries = state.entries.filter(e => !state.selected.has(e.address));
+    state.selected.clear();
+    applySort();
+    updateStats();
+    setStatus('已删除所选行');
+  });
+
+  // 清除重复（地址+端口）
+  document.getElementById('ctx-dedup-results').addEventListener('click', () => {
+    const seen = new Set();
+    const before = state.entries.length;
+    state.entries = state.entries.filter(e => {
+      const key = e.address + ':' + e.port;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    applySort();
+    setStatus(`已清除 ${before - state.entries.length} 条重复行`);
+  });
+
+  // 测试选择（对选中条目或当前结果列表重新测试）
+  document.getElementById('ctx-test-selected').addEventListener('click', () => {
+    retestSelected();
+  });
+
+  // 清除备注（有选中清选中，否则清全部）
+  document.getElementById('ctx-clear-remark').addEventListener('click', async () => {
+    if (!state.entries.length) return;
+    const updates = [];
+    if (state.selected.size > 0) {
+      let n = 0;
+      state.entries.forEach(e => {
+        if (state.selected.has(e.address)) { e.remark = ''; updates.push({address: e.address, port: e.port, remark: ''}); n++; }
+      });
+      applySort();
+      setStatus(`已清除 ${n} 条选中条目的备注`);
+    } else {
+      state.entries.forEach(e => { e.remark = ''; updates.push({address: e.address, port: e.port, remark: ''}); });
+      applySort();
+      setStatus('已清除所有条目的备注');
+    }
+    // 同步到后端（确保导出使用最新数据）
+    try { await api('update_entries', updates); } catch(e) {}
+  });
+
+
+  // ── 在结果表格空白区域右键也可弹出菜单 ─────────
+  document.getElementById('result-body').addEventListener('contextmenu', ev => {
+    ev.preventDefault();
+    state.ctxTargetAddr = null;
+    showCtxMenu(ev.clientX, ev.clientY);
+  });
+
+  // ── Ctrl+A 全选 ────────────────────────────────
+  document.addEventListener('keydown', e => {
+    if (e.ctrlKey && (e.key === 'a' || e.key === 'A') && state.entries.length > 0) {
+      const active = document.activeElement;
+      if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT')) return;
+      e.preventDefault();
+      state.entries.forEach(e => state.selected.add(e.address));
+      state.filtered.forEach(e => state.selected.add(e.address));
+      syncRowSelection();
+      updateStats();
+      setStatus('已全选（' + state.selected.size + ' 条）');
+    }
+  });
+
+  // 清空列表
+  document.getElementById('ctx-clear-all').addEventListener('click', clearResults);
+}
+
+// ═══════════════════════════════════════════════
+//  Table sort (header click)
+// ═══════════════════════════════════════════════
+// ─── 同步勾选状态到 DOM ─────────────────────
+function syncRowSelection() {
+  document.querySelectorAll('#result-body tr').forEach(tr => {
+    const cb = tr.querySelector('.row-select');
+    if (!cb) return;
+    const addr = cb.dataset.addr;
+    const checked = state.selected.has(addr);
+    cb.checked = checked;
+    tr.classList.toggle('selected-row', checked);
+  });
+}
+
+// ═════════════════════════════════════════════
+//  Drag-selection (marquee) + Ctrl/Shift 多选
+// ═════════════════════════════════════════════
+function initDragSelection() {
+  const tbody = document.getElementById('result-body');
+
+  // ── 拖拽框辅助 ─────────────────────────────
+  function rectOverlaps(el, r) {
+    const b = el.getBoundingClientRect();
+    return !(b.right < r.left || b.left > r.right || b.bottom < r.top || b.top > r.bottom);
+  }
+  function updateSelection(rect) {
+    tbody.querySelectorAll('tr').forEach(tr => {
+      if (!rectOverlaps(tr, rect)) return;
+      const addr = tr.querySelector('.row-select')?.dataset.addr;
+      if (!addr) return;
+      if (state.dragMode === 'add') state.selected.add(addr);
+      else state.selected.delete(addr);
+      const cb = tr.querySelector('.row-select');
+      if (cb) cb.checked = state.selected.has(addr);
+      tr.classList.toggle('selected-row', state.selected.has(addr));
+    });
+    updateStats();
+  }
+
+  // ── 鼠标按下：开始拖拽框 ──────────────────
+  tbody.addEventListener('mousedown', ev => {
+    if (ev.button !== 0) return;
+    const tag = ev.target.tagName;
+    if (tag === 'INPUT' || tag === 'BUTTON' || tag === 'SELECT' || tag === 'A') return;
+    ev.preventDefault();
+    state.dragActive = true;
+    state.dragStart  = { x: ev.clientX, y: ev.clientY };
+    state.dragMode  = (ev.ctrlKey || ev.metaKey) ? 'remove' : 'add';
+    if (!ev.ctrlKey && !ev.shiftKey) state.selected.clear();
+    const el = document.createElement('div');
+    el.className = 'sel-rect';
+    el.style.left   = ev.clientX + 'px';
+    el.style.top    = ev.clientY + 'px';
+    el.style.width   = '0px';
+    el.style.height  = '0px';
+    document.body.appendChild(el);
+    state.dragRectEl = el;
+  });
+
+  // ── 鼠标移动：更新拖拽框 ──────────────────
+  document.addEventListener('mousemove', ev => {
+    if (!state.dragActive || !state.dragRectEl) return;
+    const s = state.dragStart;
+    const el = state.dragRectEl;
+    const x1 = Math.min(s.x, ev.clientX);
+    const y1 = Math.min(s.y, ev.clientY);
+    el.style.left   = x1 + 'px';
+    el.style.top    = y1 + 'px';
+    el.style.width   = Math.abs(ev.clientX - s.x) + 'px';
+    el.style.height  = Math.abs(ev.clientY - s.y) + 'px';
+    const rect = { left:x1, top:y1, right:x1+Math.abs(ev.clientX-s.x), bottom:y1+Math.abs(ev.clientY-s.y) };
+    updateSelection(rect);
+  });
+
+  // ── 鼠标抬起：结束拖拽 ──────────────────────
+  document.addEventListener('mouseup', () => {
+    if (!state.dragActive) return;
+    state.dragActive = false;
+    if (state.dragRectEl) { state.dragRectEl.remove(); state.dragRectEl = null; }
+    state.dragStart = null;
+    syncRowSelection();
+  });
+
+  // ── 事件委托：Ctrl+Click / Shift+Click 行多选 ──
+  tbody.addEventListener('click', ev => {
+    const tr = ev.target.closest('tr');
+    if (!tr) return;
+    const cb = tr.querySelector('.row-select');
+    if (!cb) return;
+    // 点到了 checkbox 本身，让它自己处理
+    if (ev.target === cb || ev.target.tagName === 'INPUT' || ev.target.tagName === 'BUTTON' || ev.target.tagName === 'A') return;
+
+    const addr = cb.dataset.addr;
+    const idx  = state.filtered.findIndex(e => e.address === addr);
+    if (idx < 0) return;
+
+    if (ev.shiftKey && state.lastClickedIdx >= 0) {
+      // 范围选择
+      const a = Math.min(state.lastClickedIdx, idx);
+      const b = Math.max(state.lastClickedIdx, idx);
+      for (let i = a; i <= b; i++) state.selected.add(state.filtered[i].address);
+    } else if (ev.ctrlKey || ev.metaKey) {
+      // 切换
+      if (state.selected.has(addr)) state.selected.delete(addr);
+      else state.selected.add(addr);
+    } else {
+      // 普通单击：只选这一行
+      state.selected.clear();
+      state.selected.add(addr);
+    }
+    state.lastClickedIdx = idx;
+    syncRowSelection();
+    updateStats();
+  });
+}
+
+function initTableSort() {
+  document.querySelectorAll('th[data-col]').forEach(th => {
+    th.addEventListener('click', () => {
+      const col = th.dataset.col;
+      if (state.sortField === col) state.sortAsc = !state.sortAsc;
+      else { state.sortField = col; state.sortAsc = true; }
+      const sel = document.getElementById('sort-field');
+      if ([...sel.options].some(o => o.value === col)) sel.value = col;
+      document.getElementById('sort-dir').value = state.sortAsc ? 'asc' : 'desc';
+      applySort();
+    });
+  });
+}
+
+function initSearch() {
+  document.getElementById('search-input').addEventListener('input', function() {
+    state.searchQ = this.value.toLowerCase();
+    applySort();
+  });
+  document.getElementById('sort-field').addEventListener('change', function() {
+    state.sortField = this.value;
+    applySort();
+  });
+  document.getElementById('sort-dir').addEventListener('change', function() {
+    state.sortAsc = this.value === 'asc';
+    applySort();
+  });
+}
+
+function applySort() {
+  let list = [...state.entries];
+
+  if (state.searchQ) {
+    list = list.filter(e =>
+      e.address.toLowerCase().includes(state.searchQ) ||
+      (e.remark || '').toLowerCase().includes(state.searchQ) ||
+      (e.country || '').toLowerCase().includes(state.searchQ) ||
+      (e.isp || '').toLowerCase().includes(state.searchQ)
+    );
+  }
+
+  const field = state.sortField;
+  list.sort((a, b) => {
+    let va = getField(a, field), vb = getField(b, field);
+    if (va === null || va === undefined) va = state.sortAsc ? Infinity : -Infinity;
+    if (vb === null || vb === undefined) vb = state.sortAsc ? Infinity : -Infinity;
+    if (typeof va === 'string') return state.sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    return state.sortAsc ? va - vb : vb - va;
+  });
+
+  state.filtered = list;
+  clearTable();
+  list.forEach(e => addTableRow(e, false));
+  if (list.length === 0 && state.entries.length === 0) showTable(false);
+  else showTable(true);
+}
+
+function getField(e, field) {
+  switch(field) {
+    case 'ping': return e.ping_ms;
+    case 'download': return e.download_speed ? -e.download_speed : null;
+    case 'country': return e.country;
+    case 'telecom': return e.telecom_ms;
+    case 'mobile': return e.mobile_ms;
+    case 'unicom': return e.unicom_ms;
+    case 'address': return e.address;
+    default: return null;
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  Stats
+// ═══════════════════════════════════════════════
+function updateStats() {
+  document.getElementById('s-total').textContent = state.total || state.entries.length;
+  document.getElementById('s-testing').textContent = state.entries.filter(e => e.status === 'testing').length;
+  document.getElementById('s-done').textContent = state.done;
+  document.getElementById('s-error').textContent = state.error;
+  const done = state.entries.filter(e => e.status === 'done');
+  if (done.length) {
+    const pings = done.filter(e => e.ping_ms).map(e => e.ping_ms);
+    const dls = done.filter(e => e.download_speed).map(e => e.download_speed);
+    document.getElementById('s-best-ping').textContent = pings.length ? Math.min(...pings).toFixed(0) + ' ms' : '—';
+    document.getElementById('s-best-dl').textContent = dls.length ? Math.max(...dls).toFixed(1) + ' Mbps' : '—';
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  Select all / copy best
+// ═══════════════════════════════════════════════
+function toggleSelectAll() {
+  const all = state.filtered.every(e => state.selected.has(e.address));
+  state.filtered.forEach(e => all ? state.selected.delete(e.address) : state.selected.add(e.address));
+  state.lastClickedIdx = state.filtered.length - 1;
+  document.querySelectorAll('.row-select').forEach(cb => {
+    cb.checked = state.selected.has(cb.dataset.addr);
+    cb.closest('tr')?.classList.toggle('selected-row', cb.checked);
+  });
+}
+
+async function copyBest() {
+  const best = [...state.entries]
+    .filter(e => e.status === 'done' && e.ping_ms)
+    .sort((a, b) => a.ping_ms - b.ping_ms)
+    .slice(0, 10);
+  if (!best.length) { alert('没有可用的测试结果'); return; }
+  const lines = best.map(e => {
+    const isV6 = e.address.includes(':') && !e.address.includes('.');
+    const addr = isV6 ? `[${e.address}]` : e.address;
+    const parts = [
+      e.remark || e.address,
+      e.country,
+      e.download_speed ? e.download_speed.toFixed(1) + 'Mbps' : null,
+      e.ping_ms ? e.ping_ms.toFixed(0) + 'ms' : null,
+    ].filter(Boolean);
+    return `${addr}:${e.port}#${parts.join('|')}`;
+  });
+  try {
+    await navigator.clipboard.writeText(lines.join('\n'));
+    setStatus('已复制最优 ' + lines.length + ' 条到剪贴板');
+  } catch(e) { alert(lines.join('\n')); }
+}
+
+// ═══════════════════════════════════════════════
+//  Export modal
+// ═══════════════════════════════════════════════
+function initExportModal() {
+  document.getElementById('export-modal-close').addEventListener('click', closeExportModal);
+  document.getElementById('export-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('export-modal')) closeExportModal();
+  });
+  document.querySelectorAll('.check-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      chip.classList.toggle('selected');
+      updateExportPreview();
+    });
+  });
+  ['export-fmt','export-sort','export-topn'].forEach(id => {
+    document.getElementById(id).addEventListener('change', updateExportPreview);
+  });
+  document.getElementById('export-copy-btn').addEventListener('click', async () => {
+    const text = document.getElementById('export-preview').value;
+    try { await navigator.clipboard.writeText(text); setStatus('已复制到剪贴板'); }
+    catch(e) { alert(text); }
+  });
+  document.getElementById('export-save-btn').addEventListener('click', saveExportFile);
+}
+
+let exportSelectedOnly = false;
+function openExportModal(selectedOnly) {
+  exportSelectedOnly = selectedOnly;
+  document.getElementById('export-modal').classList.add('visible');
+  updateExportPreview();
+}
+function closeExportModal() {
+  document.getElementById('export-modal').classList.remove('visible');
+}
+
+async function updateExportPreview() {
+  const params = getExportParams();
+  try {
+    const r = await api('export_data', params);
+    document.getElementById('export-preview').value = r.text || '';
+  } catch(e) {
+    document.getElementById('export-preview').value = '// 生成预览失败\n// ' + e.message;
+  }
+}
+
+function getExportParams() {
+  const fields = Array.from(document.querySelectorAll('.check-chip.selected')).map(c => c.dataset.field);
+  const topn = parseInt(document.getElementById('export-topn').value) || 0;
+  return {
+    fmt: document.getElementById('export-fmt').value,
+    sort_by: document.getElementById('export-sort').value,
+    ascending: document.getElementById('export-sort').value !== 'download',
+    fields,
+    top_n: topn || null,
+    only_success: true,
+    selected_only: exportSelectedOnly,
+    selected_addrs: exportSelectedOnly ? [...state.selected] : null,
+  };
+}
+
+async function saveExportFile() {
+  const text = document.getElementById('export-preview').value;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'cfip-result.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+  setStatus('已保存文件 cfip-result.txt');
+}
+
+// ═══════════════════════════════════════════════
+//  Connectivity test
+// ═══════════════════════════════════════════════
+async function runConnectivityTest() {
+  const targets = Array.from(document.querySelectorAll('.conn-check:checked')).map(c => c.dataset.name);
+  if (!targets.length) { alert('请先勾选要检测的目标'); return; }
+
+  const container = document.getElementById('connectivity-results');
+  container.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0">检测中...</div>';
+  setStatus('连通性检测中...');
+
+  try {
+    const r = await api('run_connectivity_test', targets);
+    if (r && r.results) {
+      showConnectivityResults(targets, r.results);
+    } else {
+      showConnectivityResults(targets, null);
+    }
+  } catch(e) {
+    showConnectivityResults(targets, null);
+  }
+}
+
+function showConnectivityResults(targets, data) {
+  const container = document.getElementById('connectivity-results');
+  container.innerHTML = targets.map(name => {
+    const res = data ? data[name] : null;
+    const ok = res ? res.ok : null;
+    const ms = res ? res.latency_ms : null;
+    const icon = CONN_ICONS[name] || '🌐';
+    return `
+      <div class="conn-res-item">
+        <span style="min-width:24px">${icon}</span>
+        <span style="flex:1;font-weight:500">${escHtml(name)}</span>
+        ${ok === null
+          ? '<span style="color:var(--muted)">检测中...</span>'
+          : ok
+          ? `<span style="color:var(--green);font-weight:600">✓ ${ms ? ms.toFixed(0)+'ms' : '可达'}</span>`
+          : '<span style="color:var(--red);font-weight:600">✕ 不可达</span>'
+        }
+      </div>`;
+  }).join('');
+  setStatus('连通性检测完成');
+}
+
+// ═══════════════════════════════════════════════
+//  Settings persistence
+// ═══════════════════════════════════════════════
+function collectSettings() {
+  return {
+    sidebarVisible,
+    activeTab: document.querySelector('.tab-btn.active')?.dataset.tab || 'input',
+    opt_geo:       document.getElementById('opt-geo')?.checked,
+    opt_download:  document.getElementById('opt-download')?.checked,
+    opt_telecom:   document.getElementById('opt-telecom')?.checked,
+    opt_mobile:    document.getElementById('opt-mobile')?.checked,
+    opt_unicom:    document.getElementById('opt-unicom')?.checked,
+    opt_city:      document.getElementById('opt-city')?.checked,
+    opt_asn:       document.getElementById('opt-asn')?.checked,
+    concurrency:   document.getElementById('opt-concurrency')?.value,
+    ping_count:    document.getElementById('opt-ping-count')?.value,
+    ping_timeout:  document.getElementById('opt-ping-timeout')?.value,
+    dl_timeout:    document.getElementById('opt-dl-timeout')?.value,
+    dl_size:       document.getElementById('opt-dl-size')?.value,
+    sort_field:    state.sortField,
+    sort_asc:      state.sortAsc,
+    conn_checked:  Array.from(document.querySelectorAll('.conn-check:checked')).map(c => c.dataset.name),
+    // 导出弹窗设置
+    export_fmt:     document.getElementById('export-fmt')?.value,
+    export_sort:    document.getElementById('export-sort')?.value,
+    export_topn:    document.getElementById('export-topn')?.value,
+    export_fields:  Array.from(document.querySelectorAll('.check-chip.selected')).map(c => c.dataset.field),
+  };
+}
+
+async function saveSettings() {
+  try { await api('save_settings', collectSettings()); } catch(e) {}
+}
+
+async function restoreSettings() {
+  try {
+    const s = await api('load_settings');
+    if (!s || Object.keys(s).length === 0) return;
+    window._savedSettings = s;
+
+    // 侧边栏
+    if (s.sidebarVisible === false) {
+      sidebarVisible = false;
+      document.getElementById('app').classList.add('sidebar-hidden');
+    }
+    // 激活 tab
+    if (s.activeTab) {
+      const btn = document.querySelector(`[data-tab="${s.activeTab}"]`);
+      if (btn) btn.click();
+    }
+    // 选项 checkboxes
+    const boolMap = {
+      opt_geo:'opt-geo', opt_download:'opt-download',
+      opt_telecom:'opt-telecom', opt_mobile:'opt-mobile', opt_unicom:'opt-unicom',
+      opt_city:'opt-city', opt_asn:'opt-asn',
+    };
+    for (const [k, id] of Object.entries(boolMap)) {
+      if (s[k] !== undefined) {
+        const el = document.getElementById(id);
+        if (el) el.checked = s[k];
+      }
+    }
+    // 参数
+    const numMap = {
+      concurrency:'opt-concurrency', ping_count:'opt-ping-count',
+      ping_timeout:'opt-ping-timeout', dl_timeout:'opt-dl-timeout', dl_size:'opt-dl-size',
+    };
+    for (const [k, id] of Object.entries(numMap)) {
+      if (s[k] !== undefined) {
+        const el = document.getElementById(id);
+        if (el) el.value = s[k];
+      }
+    }
+    // 排序
+    if (s.sort_field) {
+      state.sortField = s.sort_field;
+      const sf = document.getElementById('sort-field');
+      if (sf) sf.value = s.sort_field;
+    }
+    if (s.sort_asc !== undefined) {
+      state.sortAsc = s.sort_asc;
+      const sd = document.getElementById('sort-dir');
+      if (sd) sd.value = s.sort_asc ? 'asc' : 'desc';
+    }
+    // 恢复导出弹窗设置
+    if (s.export_fmt) { const el=document.getElementById('export-fmt'); if(el) el.value=s.export_fmt; }
+    if (s.export_sort) { const el=document.getElementById('export-sort'); if(el) el.value=s.export_sort; }
+    if (s.export_topn != null) { const el=document.getElementById('export-topn'); if(el) el.value=s.export_topn; }
+    if (s.export_fields && Array.isArray(s.export_fields)) {
+      // 先全部取消选中
+      document.querySelectorAll('.check-chip').forEach(c => c.classList.remove('selected'));
+      s.export_fields.forEach(f => {
+        const chip = document.querySelector('.check-chip[data-field="' + f + '"]');
+        if(chip) chip.classList.add('selected');
+      });
+    }
+  } catch(e) {}
+}
+
+async function restoreIpList() {
+  try {
+    const r = await api('load_ip_list');
+    if (r && r.ok && r.text) {
+      ipInput.value = r.text;
+      onInputChange();
+    }
+  } catch(e) {}
+}
+
+function watchSettingsChange() {
+  // 监听所有选项输入变化，防抖后保存
+  const saveDebounced = debounce(saveSettings, 800);
+  document.querySelectorAll('#tab-options input, #tab-options select').forEach(el => {
+    el.addEventListener('change', saveDebounced);
+  });
+  // 导出弹窗设置变化也自动保存
+  document.querySelectorAll('#export-modal select, #export-modal input, .check-chip').forEach(el => {
+    el.addEventListener('change', saveDebounced);
+  });
+  ipInput.addEventListener('blur', saveSettings);
+}
+
+// ═══════════════════════════════════════════════
+//  Helpers
+// ═══════════════════════════════════════════════
+function setStatus(msg) {
+  document.getElementById('status-text').textContent = msg;
+}
+
+function startClock() {
+  const el = document.getElementById('time-text');
+  function tick() {
+    el.textContent = new Date().toLocaleTimeString('zh-CN');
+    setTimeout(tick, 1000);
+  }
+  tick();
+}
+
+function debounce(fn, delay) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), delay); };
+}
+
+// Mock API for browser preview/dev
+function mockApi(method, args) {
+  if (method === 'check_proxy') return { has_proxy: false, proxy_type: [], details: {} };
+  if (method === 'get_connectivity_targets') return ['Cloudflare','Google','YouTube','GitHub','ChatGPT','Apple','Telegram'];
+  if (method === 'get_connectivity_targets_full') return [
+    {name:'Cloudflare',builtin:true},{name:'Google',builtin:true},{name:'YouTube',builtin:true},
+    {name:'GitHub',builtin:true},{name:'ChatGPT',builtin:true},{name:'Apple',builtin:true},{name:'Telegram',builtin:true},
+  ];
+  if (method === 'parse_entries') {
+    const lines = (args[0]||'').split('\n').filter(l => {
+      const s = l.trim();
+      return s && !s.startsWith('#') && !s.startsWith('//') && !/^https?:\/\//i.test(s);
+    });
+    return lines.map(l => {
+      const p = l.split('#');
+      const addr = p[0].trim().split(':')[0];
+      return { address: addr, port: 443, remark: p[1] || '' };
+    });
+  }
+  if (method === 'export_data') return { text: '// 需要 pywebview 环境才能导出' };
+  if (method === 'start_test') return { ok: false, msg: '需要 pywebview 环境' };
+  if (method === 'get_results') return [];
+  if (method === 'load_settings') return {};
+  if (method === 'load_ip_list') return { ok: false, text: '' };
+  if (method === 'save_settings') return { ok: true };
+  if (method === 'save_ip_list') return { ok: true };
+  if (method === 'add_connectivity_target') return { ok: true };
+  if (method === 'remove_connectivity_target') return { ok: true };
+  if (method === 'run_connectivity_test') return { ok: true, results: {} };
+  return null;
+}
+</script>
+</body>
+</html>
