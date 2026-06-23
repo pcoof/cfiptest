@@ -306,88 +306,122 @@ def get_ip_info(address: str, timeout: float = 5.0) -> Dict[str, Any]:
 # ─────────────────────────────────────────────
 # 下载速度测试（Cloudflare 测速文件）
 # ─────────────────────────────────────────────
+import http.client
+
+
+def _is_ipv6_address(host: str) -> bool:
+    try:
+        ipaddress.IPv6Address(host)
+        return True
+    except ValueError:
+        return False
+
+
+def _is_ip_address(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return False
+
+
+class _DirectHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPS 连接，允许连接目标 IP 并覆盖 SNI / Host。"""
+    def __init__(self, connect_host: str, port: int, sni_host: str,
+                 host_header: str, timeout: float, context: ssl.SSLContext):
+        self._connect_host = connect_host
+        self._sni_host = sni_host
+        super().__init__(host_header, port, timeout=timeout, context=context)
+
+    def connect(self) -> None:
+        sock = socket.create_connection((self._connect_host, self.port), self.timeout)
+        self.sock = self._context.wrap_socket(sock, server_hostname=self._sni_host)
+
+
+def _https_download(host: str, port: int, path: str, sni_host: str,
+                    host_header: str, timeout: float, context: ssl.SSLContext) -> bytes:
+    """直接连接到 host:port，使用 sni_host 做 TLS SNI，发送 host_header 作为 HTTP Host。"""
+    conn = _DirectHTTPSConnection(
+        connect_host=host, port=port, sni_host=sni_host,
+        host_header=host_header, timeout=timeout, context=context
+    )
+    try:
+        conn.request(
+            "GET", path,
+            headers={
+                "Host": host_header,
+                "User-Agent": "cfiptest/1.0",
+                "Accept": "*/*",
+                "Connection": "close",
+            }
+        )
+        resp = conn.getresponse()
+        data = resp.read()
+        return data
+    finally:
+        conn.close()
+
+
 def test_download_speed(
     host: str,
     port: int,
     timeout: float = 10.0,
-    test_url_path: str = "/cdn-cgi/trace",
     download_size_mb: float = 5.0,
 ) -> Optional[float]:
     """
-    通过 HTTPS 连接到目标 IP，测试下载速度(Mbps)。
-    使用 Cloudflare speed.cloudflare.com 的测速文件。
+    通过 HTTPS 直连到目标 IP/域名，测试 Cloudflare 下载速度 (Mbps)。
+    对 IP 地址使用 speed.cloudflare.com 作为 SNI 与 Host，对域名则使用域名自身。
+    支持 IPv6 地址。
     """
-    # 直接测试目标 IP 的 HTTPS 响应速度（用 __cf_chl_jschl_tk__ 方式不实际，改用简单文件下载）
-    # 对目标 IP 建立 TLS 连接并下载 /cdn-cgi/trace 来验证可达性，然后测速
+    context = ssl.create_default_context()
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+
+    is_ip = _is_ip_address(host)
+    is_ipv6 = _is_ipv6_address(host)
+
+    # 连接目标：socket 不需要中括号
+    connect_host = host
+    # HTTP Host 头：IPv6 需要中括号
+    host_header = f"[{host}]" if is_ipv6 else host
+    # TLS SNI：IP 地址使用 CF 测速域名，否则使用目标域名
+    sni_host = "speed.cloudflare.com" if is_ip else host
+
+    # 如果目标是域名，Host 头也使用域名（与 SNI 一致）
+    actual_host_header = sni_host if is_ip else host_header
+
+    # 1. 主测速：/__down?bytes=N
     try:
-        # 构造 raw socket + TLS 请求
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-
-        # 用 HTTP/1.1 GET 请求下载一个大文件
-        # Cloudflare 标准测速地址
-        sizes = {1: "1mb", 5: "5mb", 10: "10mb", 25: "25mb", 100: "100mb"}
-        # 选最近的 size
-        chosen = "5mb"
-        for s_mb, s_name in sizes.items():
-            if download_size_mb <= s_mb:
-                chosen = s_name
-                break
-
-        url = f"https://{host}:{port}/__down?bytes={int(download_size_mb*1024*1024)}"
-
-        req = urllib.request.Request(
-            url,
-            headers={
-                "Host": "speed.cloudflare.com",
-                "User-Agent": "cfiptest/1.0",
-            }
-        )
-        # 为了绕过证书检查
-        handler = urllib.request.HTTPSHandler(context=context)
-        opener = urllib.request.build_opener(handler)
-
+        test_bytes = max(1, min(100, int(download_size_mb))) * 1024 * 1024
+        path = f"/__down?bytes={test_bytes}"
         start = time.perf_counter()
-        total_bytes = 0
-        with opener.open(req, timeout=timeout) as resp:
-            while True:
-                chunk = resp.read(65536)
-                if not chunk:
-                    break
-                total_bytes += len(chunk)
+        data = _https_download(
+            connect_host, port, path, sni_host, actual_host_header,
+            timeout=timeout, context=context
+        )
         elapsed = time.perf_counter() - start
-
+        total_bytes = len(data)
         if total_bytes > 0 and elapsed > 0:
             speed_mbps = (total_bytes * 8) / (elapsed * 1_000_000)
             return round(speed_mbps, 2)
     except Exception:
         pass
 
-    # 备用：测试 /cdn-cgi/trace 响应时间，根据响应大小估算
+    # 2. 备用：/cdn-cgi/trace 响应时间估算
     try:
-        context = ssl.create_default_context()
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-        handler = urllib.request.HTTPSHandler(context=context)
-        opener = urllib.request.build_opener(handler)
-
-        url = f"https://{host}:{port}/cdn-cgi/trace"
-        req = urllib.request.Request(url, headers={
-            "Host": "www.cloudflare.com",
-            "User-Agent": "cfiptest/1.0",
-        })
         start = time.perf_counter()
-        total_bytes = 0
-        with opener.open(req, timeout=timeout) as resp:
-            data = resp.read()
-            total_bytes = len(data)
+        data = _https_download(
+            connect_host, port, "/cdn-cgi/trace", sni_host, actual_host_header,
+            timeout=timeout, context=context
+        )
         elapsed = time.perf_counter() - start
+        total_bytes = len(data)
         if total_bytes > 100 and elapsed > 0:
             speed_mbps = (total_bytes * 8) / (elapsed * 1_000_000)
             return round(speed_mbps, 3)
     except Exception:
         pass
+
     return None
 
 

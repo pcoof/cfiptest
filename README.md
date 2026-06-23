@@ -10,25 +10,38 @@
 - **地理信息**：国家 / 城市 / ISP / ASN（via ip-api.com）
 - **运营商延迟**：电信 / 移动 / 联通 DNS 服务器连通性模拟
 - **网络连通性**：可选检测 Cloudflare / Google / YouTube / GitHub / ChatGPT / Apple / Telegram
-- **代理检测**：启动时自动检测环境变量代理、系统代理、TUN 网卡
+- **代理检测**：启动时自动检测环境变量代理、系统代理、PAC、TUN 网卡；检测到代理时禁用测试并提示关闭
 - **排序 / 筛选**：延迟、下载、国家等多字段排序，实时搜索
 - **导出**：EdgeTunnel 格式（`地址:端口#备注|国家|下载|延迟`），逐行输出，`|` 分隔字段
 
+## 环境要求
+
+- Python >= 3.13.5
+- [uv](https://docs.astral.sh/uv/)（推荐）
+
 ## 快速开始
 
-```bat
-# Windows
-run.bat
-
-# macOS / Linux
-bash run.sh
-```
-
-或手动：
+使用 [uv](https://docs.astral.sh/uv/) 管理依赖：
 
 ```bash
-pip install pywebview
+# 同步依赖
+uv sync
+
+# 启动应用
+uv run python main.py
+```
+
+或者使用标准 Python：
+
+```bash
+pip install pywebview>=6.2.1
 python main.py
+```
+
+## 打包为单文件 EXE
+
+```bash
+uv run pyinstaller --onefile --windowed --noconsole --name cfiptest --add-data "app/static;app/static" main.py
 ```
 
 ## 地址格式
@@ -44,9 +57,6 @@ www.cloudflare.com#CF
 
 # API 链接（直接输入 URL 后点「加载 URL」）
 https://raw.githubusercontent.com/cmliu/WorkerVless2sub/main/addressesapi.txt
-
-# 优选订阅（sub:// 格式）
-sub://sub.cmliussss.net#CM优选订阅
 ```
 
 ## 导出格式（EdgeTunnel）
@@ -60,16 +70,24 @@ sub://sub.cmliussss.net#CM优选订阅
 
 ```
 cfiptest/
-├── main.py          # 入口，pywebview 窗口
-├── requirements.txt
-├── run.bat          # Windows 一键启动
-├── run.sh           # macOS/Linux 一键启动
+├── main.py                    # 入口，pywebview 窗口
+├── pyproject.toml             # uv / Python 项目配置
+├── uv.lock                    # uv 锁定文件
+├── README.md
+├── .github/
+│   └── workflows/
+│       └── build.yml          # GitHub Actions 云端构建 EXE
 └── app/
-    ├── tester.py    # 后端测试引擎
-    ├── api.py       # PyWebView JS-API bridge
+    ├── tester.py              # 后端测试引擎
+    ├── api.py                 # PyWebView JS-API bridge
     └── static/
-        └── index.html  # 前端 UI
+        ├── css/style.css      # 前端样式
+        └── index.html         # 前端 UI
 ```
+
+## GitHub Actions 自动构建
+
+每次 push 到 `main` / `master` 分支时，GitHub Actions 会在 Windows 云端运行 `pyinstaller` 构建 `cfiptest.exe`，并上传 Artifact 供下载。也可在 Actions 页面手动触发。
 
 ## 测试选项说明
 
@@ -79,7 +97,8 @@ cfiptest/
 | 国家 | 地理信息查询 | ✓ |
 | 下载 | 下载速度测试 | ✓ |
 | 运营商 | 电信/移动/联通延迟 | ✓ |
-| DNS | DNS 解析测试 | - |
+| 城市 | 城市信息 | - |
+| ASN | 自治系统号 | - |
 | 并发数 | 同时测试线程数 | 8 |
 | Ping 次数 | 延迟测量次数 | 3 |
 | 测速大小 | 下载文件大小 | 5MB |
