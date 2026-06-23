@@ -7,6 +7,9 @@ import os
 import sys
 import pathlib
 
+# 版本号（与 GitHub Releases tag 保持一致，如 "2.0"）
+VERSION = "2.0"
+
 # 支持 PyInstaller 单文件模式（资源解压到临时目录）
 if hasattr(sys, '_MEIPASS'):
     ROOT = pathlib.Path(sys._MEIPASS)
@@ -19,7 +22,7 @@ from app.api import Api
 
 
 def create_window():
-    api = Api()
+    api = Api(version=VERSION)
 
     html_path = ROOT / "app" / "static" / "index.html"
     # Windows 下转换为 file:/// URI 避免路径解析问题

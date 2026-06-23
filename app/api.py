@@ -4,6 +4,11 @@ PyWebView API Bridge - 连接前端与后端
 import json
 import threading
 import os
+import sys
+import time
+import tempfile
+import urllib.request
+import urllib.error
 from typing import Any, Dict, List, Optional
 
 from .tester import (
@@ -16,6 +21,10 @@ from .tester import (
 # 持久化配置文件路径（存放在程序同目录）
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _CONFIG_FILE = os.path.join(_BASE_DIR, "cfiptest_config.json")
+
+# GitHub 仓库信息
+GITHUB_REPO = "pcoof/cfiptest"
+GITHUB_API = f"https://api.github.com/repos/{GITHUB_REPO}"
 
 
 def _load_config() -> Dict:
@@ -39,13 +48,138 @@ def _save_config(data: Dict):
 
 
 class Api:
-    def __init__(self, window=None):
+    def __init__(self, version="2.0", window=None):
         self._window = window
         self._tester = BatchTester()
         self._entries: List[IPEntry] = []
         self._lock = threading.Lock()
+        self._version = version
         # 加载持久化配置
         self._config = _load_config()
+
+    def get_version(self) -> Dict:
+        """返回当前版本号"""
+        return {"version": self._version}
+
+    def check_update(self) -> Dict:
+        """检测 GitHub Releases 是否有新版本"""
+        try:
+            req = urllib.request.Request(
+                f"{GITHUB_API}/releases/latest",
+                headers={
+                    "Accept": "application/vnd.github+json",
+                    "User-Agent": "cfiptest-updater",
+                }
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = json.loads(resp.read().decode())
+
+            latest_tag = data.get("tag_name", "").lstrip("v")
+            if not latest_tag:
+                return {"has_update": False, "error": "无法获取最新版本"}
+
+            # 比较版本号（简单字符串比较，假设格式为 "2.0", "2.1" 等）
+            has_update = self._compare_version(latest_tag, self._version)
+
+            result = {
+                "has_update": has_update,
+                "current_version": self._version,
+                "latest_version": latest_tag,
+                "release_name": data.get("name", ""),
+                "release_notes": data.get("body", ""),
+                "html_url": data.get("html_url", ""),
+            }
+
+            # 查找 EXE 下载链接
+            assets = data.get("assets", [])
+            for asset in assets:
+                if asset.get("name", "").endswith(".exe"):
+                    result["download_url"] = asset.get("browser_download_url", "")
+                    result["download_size"] = asset.get("size", 0)
+                    break
+
+            return result
+        except Exception as e:
+            return {"has_update": False, "error": str(e)}
+
+    def _compare_version(self, v1: str, v2: str) -> bool:
+        """返回 True 如果 v1 > v2"""
+        try:
+            parts1 = [int(x) for x in v1.split(".")]
+            parts2 = [int(x) for x in v2.split(".")]
+            # 补齐长度
+            max_len = max(len(parts1), len(parts2))
+            parts1 += [0] * (max_len - len(parts1))
+            parts2 += [0] * (max_len - len(parts2))
+            return parts1 > parts2
+        except Exception:
+            return False
+
+    def download_update(self, download_url: str) -> Dict:
+        """
+        下载更新并自动替换当前 EXE 后重启。
+        返回 {"ok": True} 或 {"ok": False, "error": "..."}
+        """
+        try:
+            # 获取当前 EXE 路径
+            if hasattr(sys, '_MEIPASS'):
+                # PyInstaller 单文件模式：当前进程是解压后的临时 EXE
+                # 实际 EXE 路径需要通过 sys.executable 获取
+                current_exe = sys.executable
+            else:
+                current_exe = os.path.abspath(sys.argv[0])
+
+            # 下载到临时文件
+            tmp_dir = tempfile.gettempdir()
+            tmp_file = os.path.join(tmp_dir, f"cfiptest_update_{int(time.time())}.exe")
+
+            # 下载
+            req = urllib.request.Request(
+                download_url,
+                headers={"User-Agent": "cfiptest-updater"}
+            )
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                total_size = int(resp.headers.get("Content-Length", 0))
+                downloaded = 0
+                with open(tmp_file, "wb") as f:
+                    chunk = resp.read(8192)
+                    while chunk:
+                        f.write(chunk)
+                        downloaded += len(chunk)
+                        # 发送进度
+                        if total_size > 0:
+                            progress = int(downloaded / total_size * 100)
+                            self._send("update_progress", {"progress": progress, "downloaded": downloaded, "total": total_size})
+                        chunk = resp.read(8192)
+
+            # 创建更新脚本（Windows batch）
+            exe_dir = os.path.dirname(current_exe)
+            bat_file = os.path.join(tmp_dir, f"cfiptest_update_{int(time.time())}.bat")
+
+            bat_content = f"""@echo off
+echo 正在更新 CF IP Tester...
+timeout /t 2 /nobreak > nul
+taskkill /f /im "{os.path.basename(current_exe)}" > nul 2>&1
+timeout /t 1 /nobreak > nul
+move /y "{tmp_file}" "{current_exe}" > nul
+echo 更新完成，正在启动...
+start "" "{current_exe}"
+del "%~f0"
+"""
+            with open(bat_file, "w", encoding="utf-8") as f:
+                f.write(bat_content)
+
+            # 发送完成消息
+            self._send("update_downloaded", {"bat_file": bat_file})
+
+            # 启动更新脚本并退出
+            os.startfile(bat_file)
+            time.sleep(1)
+            sys.exit(0)
+
+            return {"ok": True}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
 
     def set_window(self, window):
         self._window = window

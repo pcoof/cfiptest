@@ -396,11 +396,18 @@ td.remark{color:var(--text);max-width:130px;overflow:hidden;text-overflow:ellips
    Footer
 ═══════════════════════════════════════════════ */
 #footer{
-  grid-area:footer;display:flex;align-items:center;gap:14px;
+  grid-area:footer;display:flex;align-items:center;gap:6px;
   padding:0 14px;background:var(--surface);border-top:1px solid var(--border);
   font-size:11px;color:var(--muted);
 }
 #status-text{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.footer-sep{color:var(--border);font-size:10px}
+.footer-link{color:var(--accent);text-decoration:none;font-size:11px}
+.footer-link:hover{text-decoration:underline}
+.footer-btn{background:none;border:1px solid var(--border);color:var(--muted);font-size:11px;padding:2px 8px;border-radius:4px;cursor:pointer;transition:.15s}
+.footer-btn:hover{border-color:var(--accent);color:var(--accent)}
+.update-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--red);animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* ═══════════════════════════════════════════════
    Context Menu

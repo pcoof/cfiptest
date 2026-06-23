@@ -234,9 +234,14 @@
   <!-- ───── FOOTER ───── -->
   <footer id="footer">
     <span id="status-text">就绪</span>
-    <span>|</span>
-    <span>CF IP Tester v2.0</span>
-    <span>|</span>
+    <span class="footer-sep">|</span>
+    <a href="https://github.com/pcoof/cfiptest" target="_blank" class="footer-link" title="GitHub 仓库">GitHub</a>
+    <span class="footer-sep">|</span>
+    <span>v<span id="app-version">2.0</span></span>
+    <span class="footer-sep">|</span>
+    <button id="btn-check-update" class="footer-btn" title="检测更新">检测更新</button>
+    <span id="update-dot" class="update-dot" style="display:none" title="有新版本"></span>
+    <span class="footer-spacer"></span>
     <span id="time-text"></span>
   </footer>
 </div>
@@ -307,6 +312,20 @@
   </div>
 </div>
 
+<!-- ═══ Update Modal ═══ -->
+<div class="modal-overlay" id="update-modal">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header">
+      <span class="modal-title" id="update-modal-title">🔄 检测更新</span>
+      <button class="modal-close" id="update-modal-close">✕</button>
+    </div>
+    <div class="modal-body" id="update-modal-body">
+      <div style="text-align:center;padding:20px 0;color:var(--muted)">正在检测...</div>
+    </div>
+    <div class="modal-footer" id="update-modal-footer"></div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════
 //  State
@@ -370,6 +389,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initContextMenu();
   initDragSelection();
   initOptionWatcher();
+  initUpdate();
   startClock();
 
   // 加载保存的设置（恢复配置）
@@ -1670,6 +1690,8 @@ function debounce(fn, delay) {
 
 // Mock API for browser preview/dev
 function mockApi(method, args) {
+  if (method === 'get_version') return { version: '2.0' };
+  if (method === 'check_update') return { has_update: false, current_version: '2.0' };
   if (method === 'check_proxy') return { has_proxy: false, proxy_type: [], details: {} };
   if (method === 'get_connectivity_targets') return ['Cloudflare','Google','YouTube','GitHub','ChatGPT','Apple','Telegram'];
   if (method === 'get_connectivity_targets_full') return [
@@ -1699,6 +1721,151 @@ function mockApi(method, args) {
   if (method === 'run_connectivity_test') return { ok: true, results: {} };
   return null;
 }
+
+// ═══════════════════════════════════════════════
+//  Update logic
+// ═══════════════════════════════════════════════
+let _updateInfo = null;
+
+async function initUpdate() {
+  try {
+    const v = await api('get_version');
+    if (v && v.version) document.getElementById('app-version').textContent = v.version;
+  } catch(e) {}
+  document.getElementById('btn-check-update').addEventListener('click', onCheckUpdate);
+  document.getElementById('update-modal-close').addEventListener('click', () => {
+    document.getElementById('update-modal').classList.remove('visible');
+  });
+  document.getElementById('update-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('update-modal')) {
+      document.getElementById('update-modal').classList.remove('visible');
+    }
+  });
+  tryAutoCheckUpdate();
+}
+
+async function tryAutoCheckUpdate() {
+  try {
+    const info = await api('check_update');
+    if (info && info.has_update) {
+      document.getElementById('update-dot').style.display = 'inline-block';
+      _updateInfo = info;
+    }
+  } catch(e) {}
+}
+
+async function onCheckUpdate() {
+  const modal  = document.getElementById('update-modal');
+  const body   = document.getElementById('update-modal-body');
+  const footer = document.getElementById('update-modal-footer');
+  const title  = document.getElementById('update-modal-title');
+
+  title.textContent = '🔄 检测更新';
+  body.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--muted)">⏳ 正在检测更新...</div>';
+  footer.innerHTML = '';
+  modal.classList.add('visible');
+
+  try {
+    const info = await api('check_update');
+    _updateInfo = info;
+
+    if (!info || info.error) {
+      body.innerHTML = `<div style="padding:16px 0;color:var(--red)">检测失败：${escHtml(info ? info.error : '无法连接服务器')}</div>`;
+      return;
+    }
+    if (!info.has_update) {
+      body.innerHTML = `
+        <div style="padding:16px 0;text-align:center">
+          <div style="font-size:40px;margin-bottom:12px">✅</div>
+          <div style="font-size:14px;font-weight:600;margin-bottom:8px">已是最新版本</div>
+          <div style="font-size:12px;color:var(--muted)">当前版本：v${escHtml(info.current_version || '?')}</div>
+        </div>`;
+      document.getElementById('update-dot').style.display = 'none';
+      return;
+    }
+
+    const sizeMB = info.download_size ? (info.download_size / (1024*1024)).toFixed(1) + ' MB' : '未知大小';
+    title.textContent = '🔄 发现新版本';
+    body.innerHTML = `
+      <div style="padding:8px 0">
+        <div style="font-size:14px;font-weight:600;margin-bottom:12px">
+          发现新版本 v${escHtml(info.latest_version)}
+          <span style="color:var(--muted);font-weight:400;font-size:12px">（当前 v${escHtml(info.current_version || '?')}）</span>
+        </div>
+        ${info.release_notes ? `<div style="background:var(--surface2);border-radius:6px;padding:10px;font-size:12px;line-height:1.6;max-height:120px;overflow:auto;margin-bottom:12px;white-space:pre-wrap">${escHtml(info.release_notes)}</div>` : ''}
+        <div style="font-size:12px;color:var(--muted)">下载大小：${sizeMB}</div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">
+          <a href="${escHtml(info.html_url || 'https://github.com/pcoof/cfiptest/releases')}" target="_blank" style="color:var(--accent)">在 GitHub 查看</a>
+        </div>
+      </div>`;
+    footer.innerHTML = `
+      <button class="btn-ghost" onclick="document.getElementById('update-modal').classList.remove('visible')">稍后再说</button>
+      <button class="btn-primary" id="btn-do-update" style="padding:8px 22px">下载并更新</button>`;
+    document.getElementById('btn-do-update').addEventListener('click', onDoUpdate);
+  } catch(e) {
+    body.innerHTML = `<div style="padding:16px 0;color:var(--red)">检测失败：${escHtml(e.message)}</div>`;
+  }
+}
+
+async function onDoUpdate() {
+  const info = _updateInfo;
+  if (!info || !info.download_url) return;
+
+  const body   = document.getElementById('update-modal-body');
+  const footer = document.getElementById('update-modal-footer');
+  const title  = document.getElementById('update-modal-title');
+
+  title.textContent = '⬇️ 下载更新';
+  body.innerHTML = `
+    <div style="padding:16px 0">
+      <div style="margin-bottom:12px;font-size:13px">正在下载 v${escHtml(info.latest_version)}...</div>
+      <div id="update-progress-bar-wrap" style="background:var(--surface2);border-radius:6px;height:8px;overflow:hidden;margin-bottom:8px">
+        <div id="update-progress-bar" style="background:var(--accent);height:100%;width:0%;transition:width .3s"></div>
+      </div>
+      <div id="update-progress-text" style="font-size:11px;color:var(--muted)">0%</div>
+    </div>`;
+  footer.innerHTML = '';
+
+  window._onUpdateProgress = function(data) {
+    const pct = data.progress || 0;
+    const bar = document.getElementById('update-progress-bar');
+    const txt = document.getElementById('update-progress-text');
+    if (bar) bar.style.width = pct + '%';
+    if (txt) {
+      const mbDone  = (data.downloaded || 0) / (1024*1024);
+      const mbTotal = (data.total    || 0) / (1024*1024);
+      txt.textContent = `${pct}% （${mbDone.toFixed(1)} MB / ${mbTotal.toFixed(1)} MB）`;
+    }
+  };
+
+  try {
+    await api('download_update', info.download_url);
+  } catch(e) {
+    body.innerHTML = `<div style="padding:16px 0;color:var(--red)">更新失败：${escHtml(e.message)}</div>`;
+  }
+}
+
+// 处理后端推送的更新事件
+const _origHandleEvent2 = handleEvent;
+handleEvent = function(event, data) {
+  if (event === 'update_progress' && window._onUpdateProgress) {
+    window._onUpdateProgress(data);
+    return;
+  }
+  if (event === 'update_downloaded') {
+    const title = document.getElementById('update-modal-title');
+    const body  = document.getElementById('update-modal-body');
+    if (title) title.textContent = '✅ 下载完成';
+    if (body) body.innerHTML = `
+      <div style="padding:16px 0;text-align:center">
+        <div style="font-size:40px;margin-bottom:12px">✅</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px">下载完成，正在更新...</div>
+        <div style="font-size:12px;color:var(--muted)">应用将在 3 秒后自动重启</div>
+      </div>`;
+    return;
+  }
+  _origHandleEvent2(event, data);
+};
 </script>
 </body>
 </html>
