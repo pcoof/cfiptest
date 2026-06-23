@@ -7,8 +7,11 @@ import os
 import sys
 import pathlib
 
-# 添加项目根目录到 path
-ROOT = pathlib.Path(__file__).parent
+# 支持 PyInstaller 单文件模式（资源解压到临时目录）
+if hasattr(sys, '_MEIPASS'):
+    ROOT = pathlib.Path(sys._MEIPASS)
+else:
+    ROOT = pathlib.Path(__file__).parent
 sys.path.insert(0, str(ROOT))
 
 import webview
